@@ -1,0 +1,23 @@
+{
+  "name": "claude-workflow-kanban-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Monorepo 根, 实际产品代码在 workspace/. 这里只放代理脚本.",
+  "scripts": {
+    "dev": "pnpm --prefix workspace dev",
+    "dev:web": "pnpm --prefix workspace dev:web",
+    "build": "pnpm --prefix workspace build",
+    "tauri:build": "pnpm --prefix workspace tauri:build",
+    "test": "pnpm --prefix workspace test",
+    "test:run": "pnpm --prefix workspace test:run",
+    "test:e2e": "pnpm --prefix workspace test:e2e",
+    "lint": "pnpm --prefix workspace lint",
+    "format": "pnpm --prefix workspace format",
+    "cargo:test": "cargo test --manifest-path workspace/src-tauri/Cargo.toml",
+    "cargo:check": "cargo check --manifest-path workspace/src-tauri/Cargo.toml"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}

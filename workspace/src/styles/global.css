@@ -1,0 +1,27 @@
+/**
+ * 全局样式入口 — 与设计稿 docs/designs/claude-workflow-kanban/Workflow Kanban.html 中的 :root CSS 变量保持一致.
+ * Design Token 数值同步在 src/styles/tokens.ts.
+ */
+:root {
+  --bg: #0e1117;
+  --panel: #161b22;
+  --text: #c9d1d9;
+  --text-mute: #8b949e;
+  --green: #5db075;
+  --teal: #2aa198;
+  --yellow: #d4a017;
+  --red: #c93c20;
+  --gray: #586069;
+  --font-sm: 13px;
+  --font-md: 14px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--font-md);
+}

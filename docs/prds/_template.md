@@ -1,0 +1,190 @@
+# [模块名] PRD
+
+> 写 PRD 的核心原则: **小标题即锚点**, 后续 `@prd docs/prds/xxx.md#<锚点>` 全靠这些标题定位。
+> 所以小标题命名要稳定、明确, 不要随意改动。
+
+## 元信息
+
+| 项 | 值 |
+|----|----|
+| 模块代号 | `user-list` (英文, 与文件名一致) |
+| 负责人 | 张三 |
+| 创建日期 | 2026-04-14 |
+| 最后更新 | 2026-04-14 |
+| 状态 | draft / reviewing / approved / shipped |
+
+## 背景与目标
+
+> 为什么做这个需求? 解决什么问题? 目标用户是谁?
+> 一段话说清楚, 不要超过 200 字。
+
+## 名词解释
+
+> 仅当模块涉及业务术语时填写。让 AI 和新人不会理解错。
+
+| 术语 | 含义 |
+|------|------|
+| 配额 | 用户每月可用的接口调用次数上限 |
+
+## 设计稿
+
+> 设计稿是视觉规范的唯一来源, 与 PRD 的业务规则互补: PRD 管「做什么」, 设计稿管「长什么样」。
+> 三种来源方式可并存, 有什么填什么, 留空不阻塞。
+
+| 项 | 值 |
+|----|----|
+| 来源类型 | link / file / mcp (可多选) |
+| Figma 链接 | `https://figma.com/file/xxx` (无则留空) |
+| 本地文件 | `docs/designs/xxx.png` 或 `docs/designs/xxx.sketch` (无则留空) |
+| MCP 配置 | figma-mcp 已接入 / 未接入 |
+
+### 功能点与设计帧映射
+
+> 每个功能点对应设计稿的哪一帧 / 哪一页, 便于 `/plan` 拆任务和 `/code` 编码时对照。
+
+| 功能点 (PRD 锚点) | 设计引用 |
+|-------------------|---------|
+| #搜索表单 | Figma: `<URL>#Frame-SearchForm` 或 `docs/designs/search-form.png` |
+| #数据列表 | Figma: `<URL>#Frame-DataTable` |
+
+> **注意**:
+> - Figma 链接优先 (永远指向最新版), 本地文件会过期
+> - MCP 接入后, `/code` 阶段可实时从 Figma 提取 Design Token, 不需手动导出
+> - 切图 / 图标等代码直接消费的资源, 导出到 `workspace/public/images/`
+
+---
+
+## 功能点 1: [小标题作为锚点]
+
+> 每个功能点一个二级标题, 标题就是锚点。
+> 例如 `## 搜索表单` → `@prd docs/prds/user-list.md#搜索表单`
+
+### 用户故事
+
+> 作为 [角色], 我希望 [功能], 以便 [价值]。
+
+### 字段定义 (如有表单/数据)
+
+| 字段 | 类型 | 必填 | 校验规则 | 默认值 |
+|------|------|------|---------|--------|
+| 手机号 | string | 否 | 11 位, 1 开头, 第二位 3-9 | - |
+| 状态 | enum | 否 | 启用 / 禁用 / 全部 | 全部 |
+
+### 业务规则 (重要, 这是测试断言的来源)
+
+> 每条规则必须可测试, 用「当...时, 应...」句式更清晰。
+> 避免技术实现描述, 只写业务语义。
+
+1. 手机号格式不合法时, 表单实时显示错误提示, 搜索按钮禁用
+2. 所有字段为空时, 搜索按钮禁用
+3. 重置按钮清空字段后, 自动触发一次查询 (不用用户再点搜索)
+
+### 数据契约 (引用 OpenAPI)
+
+> **字段细节以 OpenAPI 为准** (见 `workspace/api-spec/openapi.json`), 本章节只写**业务相关信息**: 调用哪些接口、错误码如何映射到业务行为、mock 数据约定。
+> 字段类型在 OpenAPI 一处定义, 前端通过 `pnpm gen:api` 自动生成 `workspace/src/types/api.ts`, 不在 PRD 重复维护。
+
+#### 调用的接口
+
+| 业务操作 | operationId | 方法 | 路径 | 状态 |
+|---------|-------------|------|------|------|
+| 搜索用户 | `searchUsers` | GET | `/api/users/search` | ✅ 已存在 |
+| 查看详情 | `getUserById` | GET | `/api/users/{id}` | ✅ 已存在 |
+| 导出 Excel | `exportUsers` | POST | `/api/users/export` | 🆕 待后端实现 (见下方接口提议) |
+
+> **状态字段**:
+> - ✅ 已存在: `workspace/api-spec/openapi.json` 里已定义, 直接用
+> - 🆕 待后端实现: 前端基于 PRD 写了 stub 提议, 评审后进 `workspace/api-spec/openapi.local.json` 先开发, 后端实现后移除
+
+> 字段定义、参数约束、响应结构 → 看 `workspace/api-spec/openapi.json` (或 `workspace/api-spec/openapi.local.json`) 中的对应 operationId。
+
+#### 接口提议 (仅当有 🆕 接口时填写)
+
+> 前端先写一份 OpenAPI stub, 经前后端评审后:
+> - 放入 `api-spec/openapi.local.json` 本地开发 (紧急兜底)
+> - 或直接由后端合并到主 `openapi.json` (推荐, 双方从此共用同一份)
+
+```yaml
+# 示例: 导出用户列表接口
+paths:
+  /api/users/export:
+    post:
+      operationId: exportUsers
+      summary: 导出符合筛选条件的用户为 Excel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone: { type: string }
+                status: { type: string, enum: [enabled, disabled] }
+      responses:
+        '200':
+          description: Excel 文件流
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+```
+
+> ⚠️ 评审通过后记得把状态从 🆕 改为 ✅, 避免前端以为还要等后端。
+
+#### 错误码映射 (业务侧定义)
+
+> OpenAPI 只定义错误码存在, **如何处理是业务决策**, 必须在这里写。
+
+| code | 含义 | 前端处理 |
+|------|------|---------|
+| 0 | 成功 | - |
+| 40001 | 参数非法 | 表单 inline 错误提示 |
+| 40301 | 无权限 | 跳 `/403` |
+| 50001 | 服务异常 | 自动重试 1 次, 仍失败弹 toast |
+
+#### Mock 数据约定
+
+- 后端未就绪期间, 在 `workspace/mock/` 写假数据, **必须 import 生成的类型** 保证结构对齐:
+  ```typescript
+  import type { paths } from '@/types/api';
+  type SearchResp = paths['/api/users/search']['get']['responses']['200']['content']['application/json'];
+  ```
+- 联调时通过 `workspace/config/proxy.ts` 切换到真实后端
+- 任何字段变更不要手改 mock, 先推后端更新 OpenAPI, 拉取新 json 后让 TS 编译告诉你哪里要改
+
+### 交互流程
+
+> 文字描述或简单流程图。
+
+```
+用户输入手机号 → 实时校验 → 通过则启用搜索按钮 → 点击搜索 → loading → 列表更新
+```
+
+### 异常场景
+
+| 场景 | 预期行为 |
+|------|---------|
+| 接口超时 | 显示 `加载失败, 请重试`, 提供「重试」按钮 |
+| 无权限 | 跳转 `/403` |
+| 数据为空 | 显示 antd `Empty` 组件 |
+
+---
+
+## 功能点 2: [下一个小标题]
+
+(同上结构)
+
+---
+
+## 验收清单 (可选)
+
+> 上线前的整体验收点, 跨多个功能点的集成性要求。
+
+- [ ] 整个模块在 Chrome / Safari / 移动端 H5 三端正常显示
+- [ ] 所有接口都有 loading 和 error 处理
+- [ ] 国际化文案齐全 (中/英)
+
+## 变更记录
+
+| 日期 | 变更内容 | 变更人 |
+|------|---------|--------|
+| 2026-04-14 | 初版 | 张三 |
