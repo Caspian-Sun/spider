@@ -44,6 +44,7 @@ pnpm-debug.log*
 
 # Claude / AI 工作区个人配置
 .claude/settings.local.json
+.claude/worktrees/
 
 # 临时文件
 *.tmp
