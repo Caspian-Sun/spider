@@ -133,19 +133,52 @@
 
   function uid() { return 'a' + Math.random().toString(36).slice(2, 7); }
 
+  // Seeded run history per lane — recent terminated runs
+  const SEED_HISTORY = {
+    code:    [
+      { name: '/code',        status: 'ok',  startedLabel: '09:14', duration: '2m 18s' },
+      { name: '/code',        status: 'ok',  startedLabel: '08:42', duration: '1m 47s' },
+      { name: '/code',        status: 'err', startedLabel: '08:21', duration: '34s'    },
+    ],
+    test:    [
+      { name: '/test',        status: 'ok',  startedLabel: '09:31', duration: '46s'    },
+      { name: 'test-writer',  status: 'ok',  startedLabel: '09:30', duration: '12s'    },
+    ],
+    review:  [
+      { name: '/review',      status: 'ok',  startedLabel: '08:55', duration: '1m 02s' },
+    ],
+    fix:     [
+      { name: 'bug-fixer',    status: 'ok',  startedLabel: 'BUG-113', duration: '4m 11s' },
+      { name: 'bug-fixer',    status: 'err', startedLabel: 'BUG-110', duration: '8m 02s' },
+    ],
+  };
+
   // Build initial agent instances from the schema
   function buildInitialAgents() {
     const out = {};
     [...LANES, ...HELPERS].forEach(lane => {
-      out[lane.id] = lane.agents.map((a, i) => ({
+      const live = lane.agents.map((a) => ({
         id: uid(),
         lane: lane.id,
         kind: a.kind,
+        role: a.kind === 'main' ? 'main' : 'side',
+        sideKind: a.kind === 'sub' ? 'sub-agent' : a.kind === 'skill' ? 'sub-agent' : a.kind === 'hook' ? 'log' : null,
         name: a.name,
         desc: a.desc,
         status: 'idle',
         auto: a.auto,
       }));
+      const hist = (SEED_HISTORY[lane.id] || []).map(h => ({
+        id: uid(),
+        lane: lane.id,
+        kind: 'main',
+        role: 'history',
+        name: h.name,
+        status: h.status,
+        startedLabel: h.startedLabel,
+        duration: h.duration,
+      }));
+      out[lane.id] = [...live, ...hist];
     });
     return out;
   }
@@ -242,6 +275,38 @@
     const [tweaks, setTweaks] = useState(TWEAK_DEFAULTS);
     const [tweaksOpen, setTweaksOpen] = useState(false);
     const [rulesOpen, setRulesOpen] = useState(false);
+    const [shellOpen, setShellOpen] = useState(false);
+    const [activeView, setActiveView] = useState('board');
+    const [cmdkOpen, setCmdkOpen] = useState(false);
+    const [notifOpen, setNotifOpen] = useState(false);
+    const [notifs, setNotifs] = useState([
+      { id: 'n1', kind: 'ok',   title: '/code completed',          meta: '2m 18s · /code · 09:14',     unread: true },
+      { id: 'n2', kind: 'err',  title: 'PRD-CHECK gate failed',    meta: '3 [TBD] in PRD-043 · 09:11', unread: true },
+      { id: 'n3', kind: 'warn', title: 'check-hardcode: 1 violation', meta: 'src/features/user/pager.tsx · 09:09', unread: true },
+      { id: 'n4', kind: 'ok',   title: 'test-writer finished',     meta: '12 specs generated · 08:55',  unread: false },
+      { id: 'n5', kind: 'info', title: '/review: bug-fixer queued',meta: 'BUG-115 · 08:42',             unread: false },
+    ]);
+    const unreadCount = notifs.filter(n => n.unread).length;
+
+    // ⌘` toggles global shell panel
+    useEffect(() => {
+      const onKey = (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === '`') {
+          e.preventDefault();
+          setShellOpen(v => !v);
+        }
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+          e.preventDefault();
+          setCmdkOpen(v => !v);
+        }
+        if (e.key === 'Escape') {
+          setCmdkOpen(false);
+          setNotifOpen(false);
+        }
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }, []);
     const [violations] = useState(SEED_VIOLATIONS);
     const [activePrdId, setActivePrdId] = useState('PRD-042');
     const [prdDropdown, setPrdDropdown] = useState(false);
@@ -291,10 +356,24 @@
     const addAgent = (laneId, kind) => {
       const id = uid();
       const lane = [...LANES, ...HELPERS].find(l => l.id === laneId);
-      const defaultName = kind === 'sub' ? 'sub-agent' : kind === 'skill' ? 'ext-*' : kind === 'hook' ? 'hook' : `/${lane.cmd}`;
+      // New side kinds: 'shell' / 'sub-agent' / 'log'. Plus legacy 'main' for restore.
+      let role = 'side', sideKind = null, k = 'sub', name;
+      if (kind === 'main') {
+        role = 'main'; sideKind = null; k = 'main'; name = `/${lane.cmd}`;
+      } else if (kind === 'shell') {
+        role = 'side'; sideKind = 'shell'; k = 'sub'; name = 'bash';
+      } else if (kind === 'sub-agent') {
+        role = 'side'; sideKind = 'sub-agent'; k = 'sub'; name = 'sub-agent';
+      } else if (kind === 'log') {
+        role = 'side'; sideKind = 'log'; k = 'hook'; name = 'tail -f';
+      } else {
+        // legacy fallback
+        k = kind;
+        name = kind === 'sub' ? 'sub-agent' : kind === 'skill' ? 'ext-*' : kind === 'hook' ? 'hook' : `/${lane.cmd}`;
+      }
       setAgentsByLane(prev => ({
         ...prev,
-        [laneId]: [...(prev[laneId] || []), { id, lane: laneId, kind, name: defaultName, desc: '', status: 'idle' }],
+        [laneId]: [...(prev[laneId] || []), { id, lane: laneId, kind: k, role, sideKind, name, desc: '', status: 'idle' }],
       }));
     };
     const deleteAgent = (agentId, laneId) => {
@@ -346,6 +425,14 @@
 
     return (
       <React.Fragment>
+        {/* Activity bar — leftmost 48px */}
+        <ActivityBar
+          activeView={activeView}
+          onView={setActiveView}
+          unread={unreadCount}
+          onCmdK={() => setCmdkOpen(true)}
+        />
+
         <div className="topbar">
           <div className="brand">
             <span className="logo">λ</span>
@@ -496,6 +583,16 @@
               </React.Fragment>
             )}
           </div>
+          <button className="btn" onClick={() => setNotifOpen(v => !v)} style={{ position: 'relative' }} title="Notifications">
+            🔔
+            {unreadCount > 0 && <span className="notif-badge">{unreadCount}</span>}
+          </button>
+          <button className="btn" onClick={() => setCmdkOpen(true)} title="Command palette (⌘K)">
+            <span style={{ fontFamily: 'var(--mono)' }}>⌘K</span>
+          </button>
+          <button className="btn" onClick={() => setShellOpen(v => !v)} title="Toggle shell panel (⌘`)">
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{'>_'}</span> Shell
+          </button>
           <button className="btn" onClick={() => setActiveStep(null)}>
             <Icon name="flow" size={13} /> Reset
           </button>
@@ -535,7 +632,7 @@
         </div>
 
         {/* Board */}
-        <div className="board">
+        <div className={'board' + (shellOpen ? ' shell-open' : '')}>
           <div className="board-inner">
             {renderedLanes.map((lane, i) => (
               <React.Fragment key={lane.id}>
@@ -591,6 +688,41 @@
 
         {/* Retrospectives timeline (bottom strip) */}
         <RetroTimeline retros={SEED_RETROS} />
+
+        {/* Global shell panel — bottom drawer */}
+        <ShellPanel open={shellOpen} onClose={() => setShellOpen(false)} />
+
+        {/* Notifications drawer */}
+        {notifOpen && (
+          <React.Fragment>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 349 }} onClick={() => setNotifOpen(false)} />
+            <NotifDrawer
+              notifs={notifs}
+              onClose={() => setNotifOpen(false)}
+              onMarkRead={(id) => setNotifs(prev => prev.map(n => n.id === id ? { ...n, unread: false } : n))}
+              onClearAll={() => setNotifs(prev => prev.map(n => ({ ...n, unread: false })))}
+            />
+          </React.Fragment>
+        )}
+
+        {/* Command palette */}
+        {cmdkOpen && (
+          <CommandPalette
+            lanes={renderedLanes}
+            prds={SEED_PRDS}
+            onClose={() => setCmdkOpen(false)}
+            onJumpLane={(laneId) => { setActiveStep(laneId); setCmdkOpen(false); }}
+            onOpenPrd={(prdId) => { setActivePrdId(prdId); setCmdkOpen(false); }}
+            onAction={(action) => {
+              setCmdkOpen(false);
+              if (action === 'shell') setShellOpen(true);
+              if (action === 'rules') setRulesOpen(true);
+              if (action === 'run') runAll();
+              if (action === 'reset') setActiveStep(null);
+              if (action === 'notif') setNotifOpen(true);
+            }}
+          />
+        )}
 
         {/* Docs viewer (static md files) */}
         {docsView && (
@@ -703,10 +835,30 @@
   }
 
   function Lane({ lane, agents, tasks, bugs, active, isDropTarget, density, onDragStart, onDragEnd, onDragOver, onDrop, onStatusChange, onAddAgent, onDelete, onFocus }) {
-    const main = agents.filter(a => a.kind === 'main');
-    const subs = agents.filter(a => a.kind === 'sub');
-    const skills = agents.filter(a => a.kind === 'skill');
-    const hooks = agents.filter(a => a.kind === 'hook');
+    // ─── New 3-tier model ────────────────────────────────
+    // role: 'main' (exactly 1, runs the lane's command)
+    //       'side' (0..N — shells / sub-agents / log streams)
+    //       'history' (recent terminated runs, collapsible)
+    // Backwards-compat: agents without `role` get classified by `kind`.
+    const norm = (a) => {
+      if (a.role) return a;
+      if (a.kind === 'main') return { ...a, role: 'main' };
+      if (a.kind === 'sub')  return { ...a, role: 'side', sideKind: 'sub-agent' };
+      if (a.kind === 'skill')return { ...a, role: 'side', sideKind: 'sub-agent' };
+      if (a.kind === 'hook') return { ...a, role: 'side', sideKind: 'log' };
+      return { ...a, role: 'side', sideKind: 'shell' };
+    };
+    const all = agents.map(norm);
+    const mains = all.filter(a => a.role === 'main');
+    const sides = all.filter(a => a.role === 'side');
+    const history = all.filter(a => a.role === 'history');
+
+    // Main is always the first kind:'main' agent (gate/check goes to side).
+    const main = mains[0] || null;
+    const extraMains = mains.slice(1).map(a => ({ ...a, role: 'side', sideKind: 'sub-agent' }));
+    const allSides = [...extraMains, ...sides];
+
+    const [historyOpen, setHistoryOpen] = useState(false);
 
     return (
       <div className={'lane' + (lane.helper ? ' helper' : '') + (active ? ' active' : '')}>
@@ -758,36 +910,101 @@
             </React.Fragment>
           )}
 
-          {main.length > 0 && <div className="lane-section-label main" style={{ marginTop: tasks ? 8 : 0 }}>Main agent{main.length > 1 ? 's' : ''}</div>}
-          {main.map(a => (
-            <AgentCard key={a.id} agent={a} density={density}
-              onDragStart={onDragStart} onDragEnd={onDragEnd}
-              onStatusChange={onStatusChange} onDelete={onDelete} onFocus={onFocus} />
-          ))}
+          {/* MAIN — exactly 1, the canonical run of this lane's command */}
+          {main && (
+            <React.Fragment>
+              <div className="lane-section-label main" style={{ marginTop: (tasks || bugs) ? 8 : 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>main · /{lane.cmd}</span>
+                <span style={{ flex: 1 }} />
+                <span title="Locked main terminal — cannot be dragged" style={{ color: 'var(--text-3)', fontSize: 9 }}>🔒 pinned</span>
+              </div>
+              <AgentCard agent={main} density={density} pinned
+                onDragStart={onDragStart} onDragEnd={onDragEnd}
+                onStatusChange={onStatusChange} onDelete={onDelete} onFocus={onFocus} />
+            </React.Fragment>
+          )}
 
-          {subs.length > 0 && <div className="lane-section-label sub" style={{ marginTop: 6 }}>Sub-agents ({subs.length})</div>}
-          {subs.map(a => (
-            <AgentCard key={a.id} agent={a} density={density} short
-              onDragStart={onDragStart} onDragEnd={onDragEnd}
-              onStatusChange={onStatusChange} onDelete={onDelete} onFocus={onFocus} />
-          ))}
+          {/* SUB-AGENTS — manual, user adds */}
+          {(() => {
+            const subAgents = allSides.filter(s => s.sideKind !== 'log');
+            const logs = allSides.filter(s => s.sideKind === 'log');
+            return (
+              <React.Fragment>
+                {subAgents.length > 0 && (
+                  <React.Fragment>
+                    <div className="lane-section-label sub" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>sub-agents ({subAgents.length})</span>
+                      <span style={{ flex: 1 }} />
+                      <span style={{ color: 'var(--text-3)', fontSize: 9 }}>parallel specialists</span>
+                    </div>
+                    {subAgents.map(a => (
+                      <AgentCard key={a.id} agent={a} density={density} short
+                        onDragStart={onDragStart} onDragEnd={onDragEnd}
+                        onStatusChange={onStatusChange} onDelete={onDelete} onFocus={onFocus} />
+                    ))}
+                  </React.Fragment>
+                )}
+                {logs.length > 0 && (
+                  <React.Fragment>
+                    <div className="lane-section-label hook" style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>logs ({logs.length})</span>
+                      <span style={{ flex: 1 }} />
+                      <span style={{ color: 'var(--text-3)', fontSize: 9 }}>auto · from hooks</span>
+                    </div>
+                    {logs.map(a => (
+                      <AgentCard key={a.id} agent={a} density={density} short
+                        onDragStart={onDragStart} onDragEnd={onDragEnd}
+                        onStatusChange={onStatusChange} onDelete={onDelete} onFocus={onFocus} />
+                    ))}
+                  </React.Fragment>
+                )}
+              </React.Fragment>
+            );
+          })()}
 
-          {skills.length > 0 && <div className="lane-section-label skill" style={{ marginTop: 6 }}>Skills</div>}
-          {skills.map(a => (
-            <AgentCard key={a.id} agent={a} density={density} short
-              onDragStart={onDragStart} onDragEnd={onDragEnd}
-              onStatusChange={onStatusChange} onDelete={onDelete} onFocus={onFocus} />
-          ))}
-
-          {hooks.length > 0 && <div className="lane-section-label hook" style={{ marginTop: 6 }}>Hooks</div>}
-          {hooks.map(a => (
-            <AgentCard key={a.id} agent={a} density={density} short
-              onDragStart={onDragStart} onDragEnd={onDragEnd}
-              onStatusChange={onStatusChange} onDelete={onDelete} onFocus={onFocus} />
-          ))}
+          {/* HISTORY — collapsed list of terminated runs */}
+          {history.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div
+                className="lane-section-label"
+                onClick={() => setHistoryOpen(v => !v)}
+                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, userSelect: 'none' }}
+              >
+                <span style={{ color: 'var(--text-3)' }}>{historyOpen ? '▾' : '▸'}</span>
+                <span>history ({history.length})</span>
+                <span style={{ flex: 1 }} />
+                <span style={{ color: 'var(--text-3)', fontSize: 9 }}>last {history.length} runs</span>
+              </div>
+              {!historyOpen && (
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: 4,
+                  padding: '4px 0 0 14px',
+                  fontFamily: 'var(--mono)', fontSize: 10,
+                }}>
+                  {history.slice(0, 6).map(h => {
+                    const c = h.status === 'ok' ? 'var(--green)' : h.status === 'err' ? 'var(--red)' : 'var(--text-3)';
+                    return (
+                      <span key={h.id} style={{
+                        padding: '2px 6px', borderRadius: 3,
+                        border: '1px solid var(--line)',
+                        background: 'var(--bg-2)', color: c,
+                      }}>
+                        {h.status === 'ok' ? '✓' : h.status === 'err' ? '✗' : '·'} {h.startedLabel || 'past'}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {historyOpen && history.map(a => (
+                <AgentCard key={a.id} agent={a} density={density} short historyMode
+                  onDragStart={onDragStart} onDragEnd={onDragEnd}
+                  onStatusChange={onStatusChange} onDelete={onDelete} onFocus={onFocus} />
+              ))}
+            </div>
+          )}
         </div>
         <div className="lane-foot">
-          <LaneAddMenu laneId={lane.id} onAdd={onAddAgent} cmd={lane.cmd} />
+          <LaneAddMenu laneId={lane.id} onAdd={onAddAgent} cmd={lane.cmd} hasMain={!!main} />
         </div>
       </div>
     );
@@ -865,41 +1082,54 @@
     );
   }
 
-  function LaneAddMenu({ laneId, onAdd, cmd }) {
-    const [open, setOpen] = useState(false);
+  function LaneAddMenu({ laneId, onAdd, cmd, hasMain }) {
     return (
-      <div style={{ position: 'relative' }}>
-        <button className="add-btn" onClick={() => setOpen(v => !v)}>
-          <Icon name="plus" size={11} /> spawn terminal in /{cmd}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <button className="add-btn" onClick={() => onAdd(laneId, 'sub-agent')}>
+          <Icon name="plus" size={11} /> add sub-agent
         </button>
-        {open && (
-          <>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 199 }} onClick={() => setOpen(false)} />
-            <div className="ctx" style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 6 }}>
-              <button onClick={() => { onAdd(laneId, 'main'); setOpen(false); }}>main agent <span style={{ color: 'var(--green)' }}>●</span></button>
-              <button onClick={() => { onAdd(laneId, 'sub'); setOpen(false); }}>sub-agent <span style={{ color: 'var(--purple)' }}>●</span></button>
-              <button onClick={() => { onAdd(laneId, 'skill'); setOpen(false); }}>skill <span style={{ color: 'var(--teal)' }}>●</span></button>
-              <button onClick={() => { onAdd(laneId, 'hook'); setOpen(false); }}>hook <span style={{ color: 'var(--amber)' }}>●</span></button>
-            </div>
-          </>
+        {!hasMain && (
+          <button className="add-btn" onClick={() => onAdd(laneId, 'main')}
+            style={{ borderColor: 'rgba(110,231,127,0.4)', color: 'var(--green)' }}>
+            <span>●</span> restore main · /{cmd}
+          </button>
         )}
       </div>
     );
   }
 
-  function AgentCard({ agent, density, short, onDragStart, onDragEnd, onStatusChange, onDelete, onFocus }) {
+  function AgentCard({ agent, density, short, pinned, historyMode, onDragStart, onDragEnd, onStatusChange, onDelete, onFocus }) {
     const [menu, setMenu] = useState(null);
+    const sideIcon = agent.sideKind === 'shell' ? '🔧'
+                  : agent.sideKind === 'sub-agent' ? '🤖'
+                  : agent.sideKind === 'log' ? '📝' : '';
+    const roleLabel = agent.role === 'main' ? 'main'
+                    : agent.role === 'history' ? 'past'
+                    : (agent.sideKind || agent.kind);
     return (
       <div
-        className={'agent kind-' + agent.kind}
-        draggable
-        onDragStart={(e) => { e.dataTransfer.setData('text/plain', agent.id); onDragStart(agent.id, agent.lane); }}
+        className={'agent kind-' + (agent.kind || 'main') + (pinned ? ' pinned' : '') + (historyMode ? ' history' : '')}
+        draggable={!pinned}
+        style={historyMode ? { opacity: 0.55 } : pinned ? { borderLeft: '3px solid var(--green)' } : undefined}
+        onDragStart={(e) => {
+          if (pinned) { e.preventDefault(); return; }
+          e.dataTransfer.setData('text/plain', agent.id);
+          onDragStart(agent.id, agent.lane);
+        }}
         onDragEnd={() => onDragEnd()}
       >
         <div className="agent-head">
           <span className="lights"><i className="r" /><i className="y" /><i className="g" /></span>
-          <span className={'kind-tag ' + agent.kind}>{agent.kind}</span>
+          <span className={'kind-tag ' + (agent.kind || 'main')} title={agent.role || agent.kind}>
+            {sideIcon && <span style={{ marginRight: 3 }}>{sideIcon}</span>}
+            {roleLabel}
+          </span>
           <div className="title">{agent.name}</div>
+          {historyMode && agent.startedLabel && (
+            <span style={{ color: 'var(--text-3)', fontSize: 10, fontFamily: 'var(--mono)', marginRight: 6 }}>
+              {agent.startedLabel}
+            </span>
+          )}
           <span className={'status ' + agent.status}>{agent.status}</span>
           <button className="menu-btn" onClick={(e) => {
             e.stopPropagation();
@@ -907,21 +1137,40 @@
             setMenu({ x: r.right, y: r.bottom + 4 });
           }}>⋯</button>
         </div>
-        {density !== 'compact' && agent.desc && <div className="agent-desc">{agent.desc}</div>}
-        <window.WFTerminal
-          cmd={agent.name.replace(/^\//, '')}
-          autoRun={agent.auto && agent.kind !== 'sub'}
-          short={short || density === 'compact'}
-          onStatusChange={(s) => onStatusChange(agent.id, agent.lane, s)}
-        />
+        {density !== 'compact' && agent.desc && !historyMode && <div className="agent-desc">{agent.desc}</div>}
+        {!historyMode && (
+          <window.WFTerminal
+            cmd={agent.name.replace(/^\//, '')}
+            autoRun={agent.auto && agent.kind !== 'sub'}
+            short={short || density === 'compact'}
+            onStatusChange={(s) => onStatusChange(agent.id, agent.lane, s)}
+          />
+        )}
+        {historyMode && (
+          <div style={{
+            padding: '6px 10px', fontFamily: 'var(--mono)', fontSize: 10.5,
+            color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <span style={{ color: agent.status === 'ok' ? 'var(--green)' : agent.status === 'err' ? 'var(--red)' : 'var(--text-3)' }}>
+              {agent.status === 'ok' ? '✓ exit 0' : agent.status === 'err' ? '✗ exit 1' : '· exit ?'}
+            </span>
+            <span>·</span>
+            <span>{agent.duration || '—'}</span>
+            <span style={{ flex: 1 }} />
+            <button className="add-btn" style={{ fontSize: 10, padding: '2px 6px' }}>↻ re-run</button>
+            <button className="add-btn" style={{ fontSize: 10, padding: '2px 6px' }}>📌 pin</button>
+          </div>
+        )}
         {menu && (
           <>
             <div style={{ position: 'fixed', inset: 0, zIndex: 199 }} onClick={() => setMenu(null)} />
             <div className="ctx" style={{ left: menu.x - 160, top: menu.y }}>
               <button onClick={() => { setMenu(null); onFocus(agent); }}>Open fullscreen</button>
+              {!pinned && !historyMode && <button onClick={() => setMenu(null)}>Move to history</button>}
               <button onClick={() => { setMenu(null); onStatusChange(agent.id, agent.lane, 'idle'); }}>Reset status</button>
               <div className="sep" />
-              <button className="danger" onClick={() => { setMenu(null); onDelete(agent.id, agent.lane); }}>Delete agent</button>
+              {!pinned && <button className="danger" onClick={() => { setMenu(null); onDelete(agent.id, agent.lane); }}>Delete agent</button>}
+              {pinned && <button disabled style={{ opacity: 0.4 }}>Cannot delete · pinned main</button>}
             </div>
           </>
         )}
@@ -1115,13 +1364,245 @@
     );
   }
 
+  function ShellPanel({ open, onClose }) {
+    const [tabs, setTabs] = useState([
+      { id: 't1', name: 'bash', cwd: '~/spider' },
+      { id: 't2', name: 'bash · git', cwd: '~/spider' },
+    ]);
+    const [active, setActive] = useState('t1');
+
+    const addTab = () => {
+      const id = 't' + Date.now();
+      setTabs(prev => [...prev, { id, name: 'bash', cwd: '~/spider' }]);
+      setActive(id);
+    };
+    const closeTab = (e, id) => {
+      e.stopPropagation();
+      setTabs(prev => {
+        const next = prev.filter(t => t.id !== id);
+        if (active === id && next.length) setActive(next[0].id);
+        return next;
+      });
+    };
+
+    const activeTab = tabs.find(t => t.id === active) || tabs[0];
+
+    return (
+      <div className={'shell-panel' + (open ? ' open' : '')}>
+        <div className="tabs">
+          {tabs.map(t => (
+            <div key={t.id}
+              className={'tab' + (t.id === active ? ' active' : '')}
+              onClick={() => setActive(t.id)}>
+              <span style={{ color: 'var(--green)' }}>{'>_'}</span>
+              <span>{t.name}</span>
+              <span style={{ color: 'var(--text-3)', fontSize: 10 }}>{t.cwd}</span>
+              {tabs.length > 1 && (
+                <span className="close" onClick={(e) => closeTab(e, t.id)}>×</span>
+              )}
+            </div>
+          ))}
+          <button className="tab-add" onClick={addTab} title="New shell tab">+</button>
+          <div className="head-actions">
+            <button title="Split" onClick={addTab}>⫶</button>
+            <button title="Hide (⌘`)" onClick={onClose}>▾</button>
+          </div>
+        </div>
+        <div className="body">
+          {open && activeTab && window.WFTerminal && (
+            <window.WFTerminal
+              cmd="bash"
+              cwd={activeTab.cwd}
+              short
+              key={activeTab.id}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function ActivityBar({ activeView, onView, unread, onCmdK }) {
+    const items = [
+      { id: 'board',    glyph: '⊞', label: 'Board' },
+      { id: 'files',    glyph: '🗂', label: 'Files' },
+      { id: 'agents',   glyph: '🤖', label: 'Agents' },
+      { id: 'search',   glyph: '🔍', label: 'Search' },
+      { id: 'history',  glyph: '⟳', label: 'History' },
+    ];
+    return (
+      <div className="activity-bar">
+        <div className="ab-logo">λ</div>
+        {items.map(it => (
+          <button key={it.id}
+            className={'ab-btn' + (activeView === it.id ? ' active' : '')}
+            onClick={() => onView(it.id)}
+            title={it.label}>
+            <span style={{ fontSize: it.id === 'board' ? 18 : 14 }}>{it.glyph}</span>
+          </button>
+        ))}
+        <div className="ab-spacer" />
+        <button className="ab-btn" onClick={onCmdK} title="Command palette (⌘K)">
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>⌘K</span>
+        </button>
+        <button className="ab-btn" title="Settings">
+          <span>⚙</span>
+        </button>
+      </div>
+    );
+  }
+
+  function CommandPalette({ lanes, prds, onClose, onJumpLane, onOpenPrd, onAction }) {
+    const [q, setQ] = useState('');
+    const [sel, setSel] = useState(0);
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+      if (inputRef.current) inputRef.current.focus();
+    }, []);
+
+    // Build flat result list
+    const groups = useMemo(() => {
+      const lower = q.trim().toLowerCase();
+      const match = (s) => !lower || s.toLowerCase().includes(lower);
+
+      const actions = [
+        { key: 'a-run',   ic: '▶', label: 'Run pipeline',           desc: 'execute /prd → /release', action: 'run' },
+        { key: 'a-reset', ic: '↺', label: 'Reset pipeline',          desc: 'clear active step',       action: 'reset' },
+        { key: 'a-shell', ic: '>_', label: 'Toggle shell panel',      desc: '⌘`',                     action: 'shell' },
+        { key: 'a-rules', ic: '◆', label: 'Open .claude/rules',      desc: '5 rules · 3 violations',  action: 'rules' },
+        { key: 'a-notif', ic: '🔔', label: 'Show notifications',      desc: 'unread alerts',           action: 'notif' },
+      ].filter(a => match(a.label) || match(a.desc));
+
+      const laneRows = lanes.map(l => ({
+        key: 'l-' + l.id,
+        ic: '/',
+        label: '/' + l.cmd,
+        desc: l.desc || (l.helper ? 'helper lane' : 'main lane'),
+        laneId: l.id,
+      })).filter(r => match(r.label) || match(r.desc));
+
+      const prdRows = prds.map(p => ({
+        key: 'p-' + p.id,
+        ic: '📋',
+        label: p.id + ' · ' + p.title,
+        desc: p.status + (p.tbd ? ' · ' + p.tbd + ' [TBD]' : ''),
+        prdId: p.id,
+      })).filter(r => match(r.label) || match(r.desc));
+
+      return [
+        { name: 'Actions',  rows: actions },
+        { name: 'Lanes',    rows: laneRows },
+        { name: 'PRDs',     rows: prdRows },
+      ].filter(g => g.rows.length > 0);
+    }, [q, lanes, prds]);
+
+    const flat = useMemo(() => groups.flatMap(g => g.rows), [groups]);
+
+    useEffect(() => { setSel(0); }, [q]);
+
+    const onKey = (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(flat.length - 1, s + 1)); }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setSel(s => Math.max(0, s - 1)); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const r = flat[sel];
+        if (!r) return;
+        if (r.action) onAction(r.action);
+        else if (r.laneId) onJumpLane(r.laneId);
+        else if (r.prdId)  onOpenPrd(r.prdId);
+      }
+    };
+
+    let i = 0;
+    return (
+      <div className="cmdk-veil" onClick={onClose}>
+        <div className="cmdk" onClick={(e) => e.stopPropagation()}>
+          <input
+            ref={inputRef}
+            placeholder="Type a command, lane, PRD…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={onKey}
+          />
+          <div className="results">
+            {groups.length === 0 && (
+              <div style={{ padding: 24, color: 'var(--text-3)', fontSize: 11.5, textAlign: 'center' }}>
+                No matches for "{q}"
+              </div>
+            )}
+            {groups.map(g => (
+              <React.Fragment key={g.name}>
+                <div className="group-label">{g.name}</div>
+                {g.rows.map(r => {
+                  const idx = i++;
+                  return (
+                    <div key={r.key}
+                      className={'row' + (idx === sel ? ' active' : '')}
+                      onMouseEnter={() => setSel(idx)}
+                      onClick={() => {
+                        if (r.action) onAction(r.action);
+                        else if (r.laneId) onJumpLane(r.laneId);
+                        else if (r.prdId)  onOpenPrd(r.prdId);
+                      }}>
+                      <span className="ic">{r.ic}</span>
+                      <span>{r.label}</span>
+                      <span className="desc">{r.desc}</span>
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
+          <div className="footer">
+            <span><kbd>↑↓</kbd> navigate</span>
+            <span><kbd>↵</kbd> select</span>
+            <span><kbd>esc</kbd> close</span>
+            <span style={{ marginLeft: 'auto' }}>{flat.length} results</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function NotifDrawer({ notifs, onClose, onMarkRead, onClearAll }) {
+    const colorOf = (k) => k === 'ok' ? 'var(--green)' : k === 'err' ? 'var(--red)' : k === 'warn' ? 'var(--amber)' : 'var(--text-3)';
+    return (
+      <div className="notif-drawer" onClick={(e) => e.stopPropagation()}>
+        <div className="head">
+          <span style={{ color: 'var(--text)' }}>🔔 Notifications</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={onClearAll}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-3)', fontSize: 10.5, cursor: 'pointer', fontFamily: 'var(--mono)' }}>
+            mark all read
+          </button>
+          <button onClick={onClose}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontSize: 14, padding: '0 4px' }}>×</button>
+        </div>
+        <div className="body">
+          {notifs.length === 0 && <div className="empty">No notifications</div>}
+          {notifs.map(n => (
+            <div key={n.id} className={'item' + (n.unread ? ' unread' : '')}
+                 onClick={() => onMarkRead(n.id)}>
+              <span className="dot" style={{ background: colorOf(n.kind) }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="title">{n.title}</div>
+                <div className="meta">{n.meta}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   function RetroTimeline({ retros }) {
     const [open, setOpen] = useState(false);
     const [hover, setHover] = useState(null);
     const maxDrift = Math.max(...retros.map(r => r.drift + r.dead), 1);
     return (
       <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
+        position: 'fixed', bottom: 0, left: 48, right: 0,
         height: open ? 120 : 28,
         background: 'var(--bg-1)',
         borderTop: '1px solid var(--line)',

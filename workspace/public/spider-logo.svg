@@ -1,0 +1,60 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="180" y1="120" x2="848" y2="904" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#11243A"/>
+      <stop offset="0.52" stop-color="#193B5C"/>
+      <stop offset="1" stop-color="#09121E"/>
+    </linearGradient>
+    <linearGradient id="core" x1="512" y1="246" x2="512" y2="772" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8EF3FF"/>
+      <stop offset="1" stop-color="#53C4FF"/>
+    </linearGradient>
+    <linearGradient id="legs" x1="226" y1="304" x2="798" y2="736" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D6FBFF"/>
+      <stop offset="1" stop-color="#7ED9FF"/>
+    </linearGradient>
+    <filter id="shadow" x="134" y="126" width="756" height="782" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="26"/>
+      <feGaussianBlur stdDeviation="30"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0117647 0 0 0 0 0.054902 0 0 0 0 0.101961 0 0 0 0.5 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_1" result="shape"/>
+    </filter>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#bg)"/>
+
+  <g opacity="0.22" stroke="#A7EFFF" stroke-width="16" stroke-linecap="round">
+    <path d="M512 148V876"/>
+    <path d="M232 248L792 776"/>
+    <path d="M792 248L232 776"/>
+    <path d="M168 512H856"/>
+    <path d="M286 192C432 264 592 264 738 192"/>
+    <path d="M224 320C404 412 620 412 800 320"/>
+    <path d="M204 704C396 620 628 620 820 704"/>
+    <path d="M280 832C432 760 592 760 744 832"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <path d="M403 364C347 328 289 298 228 276" stroke="url(#legs)" stroke-width="34" stroke-linecap="round"/>
+    <path d="M391 430C309 420 252 407 187 382" stroke="url(#legs)" stroke-width="34" stroke-linecap="round"/>
+    <path d="M390 518C310 538 253 562 193 600" stroke="url(#legs)" stroke-width="34" stroke-linecap="round"/>
+    <path d="M405 590C333 630 286 674 238 736" stroke="url(#legs)" stroke-width="34" stroke-linecap="round"/>
+
+    <path d="M621 364C677 328 735 298 796 276" stroke="url(#legs)" stroke-width="34" stroke-linecap="round"/>
+    <path d="M633 430C715 420 772 407 837 382" stroke="url(#legs)" stroke-width="34" stroke-linecap="round"/>
+    <path d="M634 518C714 538 771 562 831 600" stroke="url(#legs)" stroke-width="34" stroke-linecap="round"/>
+    <path d="M619 590C691 630 738 674 786 736" stroke="url(#legs)" stroke-width="34" stroke-linecap="round"/>
+
+    <circle cx="512" cy="334" r="88" fill="url(#core)"/>
+    <ellipse cx="512" cy="564" rx="144" ry="176" fill="url(#core)"/>
+
+    <path d="M512 468L542 530L610 540L560 588L572 656L512 622L452 656L464 588L414 540L482 530L512 468Z" fill="#0D2135" opacity="0.95"/>
+
+    <circle cx="472" cy="324" r="14" fill="#0D2135"/>
+    <circle cx="552" cy="324" r="14" fill="#0D2135"/>
+  </g>
+</svg>

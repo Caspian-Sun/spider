@@ -1,0 +1,1401 @@
+{
+  "moduleName": "Claude Code Workflow Kanban",
+  "moduleCode": "claude-workflow-kanban",
+  "prdRef": "docs/prds/claude-workflow-kanban.md",
+  "summary": "将 .claude/ 和 docs/ 目录可视化为 Tauri 桌面端看板，每条泳道对应一个工作流命令，卡片绑定真实 PTY 终端会话，支持文件系统双向同步",
+  "createdAt": "2026-04-28",
+  "routeConfig": null,
+  "dataFlow": "用户选 workspace → Rust scan_workspace → scan_progress 事件流 → Zustand workspaceStore → React 看板渲染；外部文件变化 → notify watcher → workspace_changed event → 增量 store patch (<500ms)；前端写操作 → Tauri IPC → Rust 原子写 (tmp+rename+fsync) → watcher 白名单跳过；PTY 操作 → portable-pty → pty_output/pty_exit 事件 → xterm.js 渲染",
+  "tasks": [
+    {
+      "taskId": "T001",
+      "type": "precondition",
+      "name": "Tauri 项目初始化",
+      "filePath": "workspace/src-tauri/tauri.conf.json",
+      "description": "Tauri 2 + Vite 5 + React 18 + TypeScript 5 脚手架已就绪（T-M1-001 已 done）。确认 pnpm dev 能启动窗口，cargo check 通过，tsconfig 启用 strict。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工作区接入",
+      "designRef": "",
+      "businessRules": [],
+      "props": {},
+      "dependencies": [],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "pnpm --prefix workspace dev 启动后 Tauri 弹窗口",
+        "cargo check --manifest-path workspace/src-tauri/Cargo.toml 无错误",
+        "tsc --noEmit 无错误"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T002",
+      "type": "constants",
+      "name": "Design Token + 全局样式",
+      "filePath": "workspace/src/styles/tokens.ts",
+      "description": "从 docs/designs/claude-workflow-kanban/Workflow Kanban.html 的 :root CSS 变量提取所有 token，集中映射到 tokens.ts。同步创建 global.css 引入 CSS 变量和基础重置。禁止在任何组件内硬编颜色/字号/间距数字。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#顶栏",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (:root 段)",
+      "businessRules": [
+        "一切可变值通过 Design Token 引入，严禁写死颜色/字号/间距"
+      ],
+      "props": {},
+      "dependencies": ["T001"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "tokens.ts 导出 colorGreen / colorTeal / colorAmber / colorRed / colorBlue / fontSm / laneWidth 等",
+        "CSS 变量 --green / --teal / --amber / --red / --blue 已在 global.css :root 定义",
+        "没有任何组件文件含 style={{ color: '#' }} 或 className 中裸色值"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T003",
+      "type": "wrapper",
+      "name": "IPC contract 常量",
+      "filePath": "workspace/src/ipc/contract.ts",
+      "description": "集中定义所有 Tauri command 名和 event 名常量，与附录 C Rust 端命令签名一一对应。前端任何地方调用 invoke/listen 必须引用此常量，禁止字符串字面量。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件系统集成",
+      "designRef": "",
+      "businessRules": [
+        "Tauri command 名 / event 名必须用常量管理，一处拼错全链路断"
+      ],
+      "props": {},
+      "dependencies": ["T001"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "IPC.Cmd.SCAN_WORKSPACE / PICK_WORKSPACE_FOLDER / VALIDATE_WORKSPACE / GET_RECENT_WORKSPACES 等均已定义",
+        "IPC.Event.SCAN_PROGRESS / WORKSPACE_CHANGED / PTY_OUTPUT / PTY_EXIT 均已定义",
+        "全仓库无 invoke('scan_workspace') 这类裸字符串调用"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T004",
+      "type": "model",
+      "name": "TypeScript IPC 类型 (ipc.ts)",
+      "filePath": "workspace/src/types/ipc.ts",
+      "description": "定义与附录 A Rust struct 一一对应的 TS 类型：Workspace / Command / SubAgent / Rule / Hook / PRD / TaskManifest / Task / BugReport / Retrospective / StaticDoc / ScanError / AgentCardState / GenericBoard / GenericColumn / GenericCard / AppPersistentState / Layout。字段命名 camelCase（Rust 端 serde rename_all）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件扫描",
+      "designRef": "",
+      "businessRules": [
+        "TypeScript 类型必须与 Rust struct 一一对应，任何字段改动必须先改 Rust 再改 TS"
+      ],
+      "props": {},
+      "dependencies": ["T001"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "WorkspaceState = 'empty' | 'scanning' | 'invalid' | 'ready' 已定义",
+        "Workspace.scanErrors: ScanError[] 已定义",
+        "AgentCardState.status = 'idle' | 'run' | 'ok' | 'err' 已定义",
+        "GenericBoard / GenericColumn / GenericCard / AppPersistentState 已定义",
+        "无 any / unknown 类型使用"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T005",
+      "type": "model",
+      "name": "Rust AppError 枚举",
+      "filePath": "workspace/src-tauri/src/error.rs",
+      "description": "用 thiserror 定义 AppError 枚举，变体覆盖：IO / Yaml / Json / PathOutOfWorkspace / PtySpawn / PtyWrite / PtyDuplicate / WatcherInit / Conflict。所有命令返回 Result<T, AppError>，AppError 实现 Serialize 供前端解析。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件系统集成",
+      "designRef": "",
+      "businessRules": [
+        "写失败时 toast 必须展示具体原因 (PermissionDenied / DiskFull / NotFound / Other)，不能只说 Failed",
+        "命令处理函数内一律用 ? + Result，不用 unwrap"
+      ],
+      "props": {},
+      "dependencies": ["T001"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "AppError derive Serialize，前端 catch 到 JSON 对象而非 [object Object]",
+        "cargo check 通过，无 unwrap 在 command 函数中",
+        "PathOutOfWorkspace 变体存在且被路径校验逻辑触发"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T006",
+      "type": "model",
+      "name": "Rust workspace 数据模型",
+      "filePath": "workspace/src-tauri/src/models/mod.rs",
+      "description": "定义 Workspace / Command / SubAgent / Rule / Hook / PRD / TaskManifest / Task / BugReport / Retrospective / StaticDoc / ScanError struct，全部 #[derive(Serialize, Deserialize, Debug, Clone)]，字段加 #[serde(rename_all = \"camelCase\")]。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件扫描",
+      "designRef": "",
+      "businessRules": [
+        "遍历 .claude/commands/*.md, 每个文件对应一条 Command, 解析 YAML frontmatter",
+        "Command 按 idx 升序排主 pipeline; idx 为 null 或 helper: true 的进入 helper 区"
+      ],
+      "props": {},
+      "dependencies": ["T005"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "serde_json::to_string(&workspace) 不 panic",
+        "Command.idx 类型为 Option<u32>，Task.status 类型为枚举",
+        "与 workspace/src/types/ipc.ts 字段完全对应"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T007",
+      "type": "api",
+      "name": "Rust 工作区命令 (pick / validate / recent)",
+      "filePath": "workspace/src-tauri/src/commands/workspace.rs",
+      "description": "实现 4 个 Tauri command：pick_workspace_folder（调 tauri-plugin-dialog 弹系统对话框）、validate_workspace（检查 .claude/ 是否存在，返回 {valid, detected}）、get_recent_workspaces（从 app_state.json 读取最近 5 个路径，失效路径自动剔除）、add_recent_workspace（写入头部）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工作区接入",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (WorkspaceShell + Empty state)",
+      "businessRules": [
+        "选中文件夹后先调用 validate_workspace, 若返回 valid: false 则进入 invalid 状态并列出缺失项 (至少要缺 .claude)",
+        "用户在系统对话框里取消选择时, 保持当前状态不变, 不报错",
+        "scan 完成后自动进入 ready 状态, 并把 rootPath 写入 recentWorkspaces 头部",
+        "invalid 状态下点击 Pick another 回到 empty 状态, 当前路径不写入 recentWorkspaces"
+      ],
+      "props": {},
+      "dependencies": ["T005", "T006"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "pick_workspace_folder 取消时返回 Err（前端 catch 后保持状态不变）",
+        "validate_workspace 对含 .claude/ 的目录返回 { valid: true, detected: ['.claude'] }",
+        "get_recent_workspaces 剔除不存在路径，最多返回 5 个",
+        "Rust 单元测试覆盖 validate_workspace 的 valid/invalid 两条路径"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T008",
+      "type": "api",
+      "name": "Rust scan_workspace + frontmatter 解析",
+      "filePath": "workspace/src-tauri/src/scan/mod.rs",
+      "description": "实现 scan_workspace(path) → Workspace。遍历 .claude/commands|agents|rules|hooks 和 docs/prds|tasks|bug-reports|retrospectives。用 gray_matter + serde_yaml 解析 frontmatter。每扫一个文件通过 scan_progress 事件推进度（currentFile, progress 0.0-1.0）。解析失败的文件记入 scan_errors，不中断。排除 node_modules/.git/dist/target/.DS_Store。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件扫描",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (SEED_* 常量示例)",
+      "businessRules": [
+        "遍历 .claude/commands/*.md, 每个文件对应一条 Command, 解析 YAML frontmatter",
+        "Command 无 frontmatter 时降级: id = 文件名, title = 文件首个 # 标题, idx = null, helper = true",
+        "解析失败的单个文件不阻断整个扫描, 错误记入 scan_errors 数组",
+        "扫描目录时必须排除 node_modules / .git / dist / target / .DS_Store",
+        "遍历 docs/prds/*.md, tbdCount = 正文中 [TBD] 字符串的出现次数"
+      ],
+      "props": {},
+      "dependencies": ["T006"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "扫描 claude-code-workflow 仓库后 Workspace.commands 含正确数量的命令",
+        "scan_progress 事件 progress 从 0.0 递增到 1.0",
+        "包含无 frontmatter 的 md 文件时 helper: true 且不 panic",
+        "1000 文件 workspace 冷扫描 < 2s",
+        "Rust 集成测试用 tempfile 模拟目录结构验证解析结果"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T009",
+      "type": "wrapper",
+      "name": "前端 workspace IPC wrappers",
+      "filePath": "workspace/src/features/workspace/ipc/index.ts",
+      "description": "封装 scanWorkspace / validateWorkspace / pickWorkspaceFolder / getRecentWorkspaces 四个 typed 函数，入参出参类型从 @/types/ipc 引入，调用走 IPC.Cmd.* 常量。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工作区接入",
+      "designRef": "",
+      "businessRules": [
+        "不允许在组件内直接调 invoke()，必须通过 wrapper 函数"
+      ],
+      "props": {},
+      "dependencies": ["T003", "T004"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "所有函数有 JSDoc @description/@module/@prdRef",
+        "TypeScript 编译无错误",
+        "无裸 invoke('scan_workspace') 字符串"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T010",
+      "type": "store",
+      "name": "useWorkspaceStore",
+      "filePath": "workspace/src/stores/useWorkspaceStore.ts",
+      "description": "Zustand store 管理工作区状态机。state：phase(WorkspaceState) / workspace(Workspace|null) / recentWorkspaces(string[]) / activePrdId(string|null) / scanError(string|null)。actions：setPhase / setWorkspace / setActivePrd / addRecent / removeRecent / reset。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工作区接入",
+      "designRef": "",
+      "businessRules": [
+        "应用启动后, 若 get_recent_workspaces 返回空数组, 进入 empty 状态并显示欢迎页",
+        "应用启动后, 若有最近工作区记录, 默认打开最近一个并自动进入 scanning 状态",
+        "scan 完成后自动进入 ready 状态, 并把 rootPath 写入 recentWorkspaces 头部"
+      ],
+      "props": {},
+      "dependencies": ["T004", "T009"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "phase 初始值为 empty",
+        "setWorkspace 后 phase 自动跳 ready",
+        "Vitest 测试覆盖状态转换路径：empty→scanning→ready / empty→scanning→invalid",
+        "无 any 类型"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T011",
+      "type": "component",
+      "name": "WorkspaceShell + 4 状态页",
+      "filePath": "workspace/src/pages/WorkspaceShell.tsx",
+      "description": "根据 useWorkspaceStore.phase 渲染对应子组件：EmptyPage（品牌 logo + Open folder 按钮 + 最近工作区列表）/ ScanningPage（文件名 + 进度条）/ InvalidPage（缺失项列表 + Pick another 按钮）/ KanbanShell（就绪后的完整看板，T026 实现）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工作区接入",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (WorkspaceShell + Empty/Scanning/Invalid 组件)",
+      "businessRules": [
+        "应用启动后, 若 get_recent_workspaces 返回空数组, 进入 empty 状态并显示欢迎页",
+        "校验通过后进入 scanning 状态, 实时消费 scan_progress 事件并展示当前文件名 + 百分比进度条",
+        "invalid 状态下点击 Pick another 回到 empty 状态, 当前路径不写入 recentWorkspaces",
+        "ready 状态下顶栏右侧的 Close workspace 按钮返回 empty 状态, 保留 recentWorkspaces"
+      ],
+      "props": {},
+      "dependencies": ["T010"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "phase=empty 时渲染 Open folder 按钮，无 Close workspace",
+        "phase=scanning 时进度条从 0 到 100%，显示当前文件名",
+        "phase=invalid 时列出 detected 缺失项",
+        "phase=ready 时渲染 KanbanShell（内容暂占位，T026 实现）",
+        "Vitest + @testing-library/react 测试 4 个 phase 分支渲染"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T012",
+      "type": "page",
+      "name": "App.tsx 根组件 + main.tsx 入口",
+      "filePath": "workspace/src/App.tsx",
+      "description": "ReactDOM.createRoot 挂载 App。App.tsx 负责全局 Provider 挂载（i18n / Suspense）和 WorkspaceShell 渲染。useEffect 内调用 getRecentWorkspaces 决定初始 phase。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工作区接入",
+      "designRef": "",
+      "businessRules": [
+        "应用启动后, 若有最近工作区记录, 默认打开最近一个并自动进入 scanning 状态"
+      ],
+      "props": {},
+      "dependencies": ["T011"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "App 渲染不报错",
+        "启动时调用 getRecentWorkspaces，有结果则自动触发 scan"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T013",
+      "type": "constants",
+      "name": "看板领域常量",
+      "filePath": "workspace/src/features/kanban/constants.ts",
+      "description": "定义 CARD_STATE / CARD_KIND / CARD_KIND_COLOR / LANE_WIDTH / HELPER_LANE_WIDTH / BOARD_HEIGHT_OFFSET 等常量，与 PRD #终端卡片/#看板与泳道 中的枚举和尺寸规定对齐。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#看板与泳道",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.lane, .board CSS)",
+      "businessRules": [
+        "主泳道宽度 360px, helper 泳道宽度 320px",
+        "卡片左侧 3px 彩色条颜色严格按 kind: main 绿 / sub 紫 / skill teal / hook amber",
+        "Board 区域高度 100vh - 84px - 28px"
+      ],
+      "props": {},
+      "dependencies": ["T002"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "LANE_WIDTH = 360, HELPER_LANE_WIDTH = 320",
+        "CARD_KIND_COLOR.main = 'var(--green)', .sub = 'var(--purple)', .skill = 'var(--teal)', .hook = 'var(--amber)'"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T014",
+      "type": "store",
+      "name": "useKanbanStore",
+      "filePath": "workspace/src/stores/useKanbanStore.ts",
+      "description": "管理 AgentCardState 列表和看板交互状态。state：cards(AgentCardState[]) / selectedLaneId(string|null) / selectedCardIds(Set<string>)。actions：addCard / removeCard / updateCardStatus / updateCardPtyId / rebindCard(cardId, newLaneId) / selectLane / toggleSelectCard / clearSelection。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#看板与泳道",
+      "designRef": "",
+      "businessRules": [
+        "卡片跨泳道拖拽时: PTY 保留 (ptyId 不变), 仅修改 AgentCardState.laneId 并刷新 UI; 不动任何文件"
+      ],
+      "props": {},
+      "dependencies": ["T004"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "rebindCard 只改 laneId，ptyId 不变",
+        "removeCard 时，若 ptyId 非 null，store 不自动 kill（由组件负责调 pty_kill）",
+        "Vitest 测试 rebindCard / addCard / removeCard"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T015",
+      "type": "store",
+      "name": "useLayoutStore + useDrawerStore + useToastStore",
+      "filePath": "workspace/src/stores/useLayoutStore.ts",
+      "description": "useLayoutStore：layout('workflow'|'generic') / tweaks(density/showHelperLanes/showDescriptions/columnWidth/theme)。useDrawerStore：管理 RulesDrawer / DocsViewer / PRDPreview 的 open 状态。useToastStore：toast 消息队列。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#顶栏",
+      "designRef": "",
+      "businessRules": [
+        "Layout Toggle 选择持久化到 Rust 端 app_state.json (键 layout), 不写入 localStorage",
+        "所有面板改动都写入 Rust 端 app_state.json (键 tweaks.<field>), 下次启动保留; 不写 localStorage"
+      ],
+      "props": {},
+      "dependencies": ["T004"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "layout 默认值 'workflow'",
+        "useDrawerStore.openRules() 后 isRulesOpen = true",
+        "useToastStore.add() 追加消息，dismiss() 移除"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T016",
+      "type": "component",
+      "name": "TopBar",
+      "filePath": "workspace/src/features/topbar/components/TopBar.tsx",
+      "description": "顶栏容器。固定高度 46px，flex 布局：左 brand / 路径 chip → 中 PRDSelector + stats chip → 右 LayoutToggle + Rules 按钮 + Docs 按钮 + Reset 按钮 + Close workspace。路径 chip 点击复制到剪贴板。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#顶栏",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.topbar 段) + wf-app.jsx TopBar",
+      "businessRules": [
+        "顶栏固定高度 46px, 吸顶, 不随看板横向滚动",
+        "路径 chip 显示 rootPath 的最后两段 + 省略号前缀, 悬停 tooltip 显示完整路径",
+        "点击路径 chip 复制完整 rootPath 到剪贴板, 并 toast「Path copied」",
+        "stats chip 显示「● N running」, N 为实时 run 状态的 PTY 数; N = 0 时显示灰色点",
+        "Rules 按钮文案格式「Rules(N)」, 若存在 violation 文案后追加红色小数字徽章"
+      ],
+      "props": {
+        "Props": "无 props，全部从 useWorkspaceStore / useKanbanStore / useLayoutStore 取数据"
+      },
+      "dependencies": ["T010", "T014", "T015"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "高度精确 46px，position: fixed / sticky，z-index 在 Board 之上",
+        "点击路径 chip 调用 navigator.clipboard.writeText，toast 显示",
+        "stats chip N 与 cards.filter(c=>c.status==='run').length 实时一致",
+        "Rules 数量为 workspace.rules.length",
+        "Vitest 测试路径 chip 点击 → clipboard mock 被调用"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T017",
+      "type": "component",
+      "name": "PRDSelector 下拉",
+      "filePath": "workspace/src/features/topbar/components/PRDSelector.tsx",
+      "description": "显示当前激活 PRD id + status badge + tbdCount 气泡。下拉列表所有 PRD，每条可直接点 status badge 切换（调 update_frontmatter）。末尾「+ new PRD」按钮调 create_file。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#顶栏",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (PRDSelector 组件)",
+      "businessRules": [
+        "PRDSelector 展示当前激活 PRD 的 id + status badge + tbdCount (若 > 0 显示 amber 小气泡)",
+        "PRDSelector 下拉列出所有 PRD, 每条可直接点 status badge 切换状态 (draft / active / archived)",
+        "下拉末尾有 + new PRD, 点击调 create_file(docs/prds/PRD-{nextId}.md, template='prd'), 新文件立即成为激活 PRD",
+        "无任何 PRD 时 PRDSelector 显示「No PRD yet」, 下拉只有 + new"
+      ],
+      "props": {
+        "onPrdSelect": "(prdId: string) => void",
+        "onNewPrd": "() => void"
+      },
+      "dependencies": ["T010", "T015"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "tbdCount > 0 时显示 amber 气泡，= 0 时不显示",
+        "点击 status badge 触发 update_frontmatter IPC（Vitest + mockIPC）",
+        "无 PRD 时渲染 No PRD yet",
+        "新建 PRD 后新 id 自动成为 activePrdId"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T018",
+      "type": "component",
+      "name": "LayoutToggle",
+      "filePath": "workspace/src/features/topbar/components/LayoutToggle.tsx",
+      "description": "顶栏中 columns / grid 两个图标按钮，点击切换 workflow / generic layout。切换时调用 set_layout Tauri command 持久化到 Rust app_state.json。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#顶栏",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.topbar .layout-toggle 段)",
+      "businessRules": [
+        "Layout Toggle 是位于 stats chip 与 Rules 按钮之间的图标按钮组 (icon: columns / grid), 默认高亮 workflow",
+        "Layout Toggle 切换时, 主体 Board 区域整体替换, 顶栏 / RetroTimeline / 抽屉保持挂载不重渲",
+        "Layout Toggle 选择持久化到 Rust 端 app_state.json (键 layout), 不写入 localStorage"
+      ],
+      "props": {},
+      "dependencies": ["T015"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "默认 workflow 按钮高亮",
+        "点击 generic 后 useLayoutStore.layout === 'generic'",
+        "切换调用 IPC set_layout（mockIPC 验证）",
+        "TopBar 和 RetroTimeline 不重新挂载（key 不变）"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T019",
+      "type": "component",
+      "name": "PipelineStrip",
+      "filePath": "workspace/src/features/kanban/components/PipelineStrip.tsx",
+      "description": "固定高度 38px，渲染主命令 step 列表（按 idx 升序）+ gate 菱形 + helpers 区。点击 step 联动 Board 滚动。done 状态 step 用 teal 填充。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#流水线条",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.pipeline 段)",
+      "businessRules": [
+        "PipelineStrip 固定高度 38px, 位于顶栏下方, 跨屏吸顶",
+        "每个主命令 (helper: false 且有 idx) 渲染为一个 step, 按 idx 升序",
+        "gate 命令以小菱形 step 形式嵌在其上游 step 之后",
+        "点击 step 高亮对应泳道, 并让 Board 自动横向滚动到该泳道居中位置",
+        "若一个泳道下所有归属 Task 的 status 都是 done, 则其 step 使用 .done 样式"
+      ],
+      "props": {
+        "commands": "Command[]",
+        "tasks": "Task[]",
+        "selectedLaneId": "string | null",
+        "onStepClick": "(commandId: string) => void"
+      },
+      "dependencies": ["T010", "T014"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "只渲染 helper:false 且 idx 非 null 的命令",
+        "gate 命令显示菱形符号",
+        "所有 task done 时 step className 含 done",
+        "helper 命令放在 | 分隔符后",
+        "Vitest 测试 done/active/no-tasks 三种 step 样式"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T020",
+      "type": "component",
+      "name": "Lane",
+      "filePath": "workspace/src/features/kanban/components/Lane.tsx",
+      "description": "单条泳道。lane-head（idx + 命令名 + artifact tags）+ lane-body（tasks 区 → MAIN → SUB → SKILL → HOOK 分区）+ lane-foot（+ add terminal 按钮）。helper lane 虚线边框宽 320px，主 lane 实线 360px。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#看板与泳道",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.lane, .lane-head, .lane-body 段)",
+      "businessRules": [
+        "主泳道宽度 360px, helper 泳道宽度 320px 且边框改虚线",
+        "lane-head 分两行: 第一行 idx 徽章 + 斜杠命令名 + count chip + gate-badge; 第二行 desc + artifact tags",
+        "artifact tag 分两色: 输入 (蓝色, 来自 Command.inputs)、输出 (绿色, 来自 Command.outputs)",
+        "lane-body 纵向分四区, 顺序固定: tasks → MAIN → SUB → SKILL → HOOK; 该区无数据时对应 label 隐藏",
+        "空泳道在 lane-body 中显示 Inbox 图标 + 灰色提示文案"
+      ],
+      "props": {
+        "command": "Command",
+        "tasks": "Task[]",
+        "agents": "SubAgent[]",
+        "cards": "AgentCardState[]",
+        "isSelected": "boolean",
+        "onAddCard": "() => void"
+      },
+      "dependencies": ["T013", "T014"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "helper lane 有虚线边框，宽度 320px",
+        "主 lane 宽度 360px",
+        "无 tasks + 无 cards 时显示 Inbox 占位",
+        "artifact tags 输入蓝色、输出绿色",
+        "分区 label 无数据时不渲染"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T021",
+      "type": "component",
+      "name": "Connector (SVG 箭头)",
+      "filePath": "workspace/src/features/kanban/components/Connector.tsx",
+      "description": "泳道间 52px 宽 SVG 连接箭头。普通箭头灰色，gate 类箭头 amber + 菱形前缀。中央浮动 arrow-label 显示下游命令 inputs[0]。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#看板与泳道",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.connector 段)",
+      "businessRules": [
+        "泳道之间 connector 占 52px, SVG 箭头从上一泳道右侧中段指向下一泳道左侧中段",
+        "connector 中央浮动 arrow-label 显示下游命令 inputs 数组首个 artifact (无 inputs 则省略)",
+        "gate 类 connector 用 amber 色 + 菱形前缀符号 ◆"
+      ],
+      "props": {
+        "isGate": "boolean",
+        "artifactLabel": "string | null"
+      },
+      "dependencies": ["T002"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "isGate=true 时 SVG stroke 颜色为 var(--amber)，显示 ◆",
+        "artifactLabel 非 null 时中央显示文字",
+        "宽度精确 52px"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T022",
+      "type": "component",
+      "name": "AgentCard (基础骨架，无终端)",
+      "filePath": "workspace/src/features/kanban/components/AgentCard.tsx",
+      "description": "卡片骨架：左侧 3px 彩色 kind 条 + 卡片头（红黄绿灯 + kind-tag + title + status badge + ⋯ 菜单）+ 占位区（终端在 T043 接入）。支持 collapsed 折叠（双击卡片头）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#终端卡片",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-terminal.jsx + wf-app.jsx AgentCard",
+      "businessRules": [
+        "卡片左侧 3px 彩色条颜色严格按 kind: main 绿 / sub 紫 / skill teal / hook amber",
+        "kind-tag 文字 uppercase 展示 (MAIN / SUB / SKILL / HOOK), 字号 9px",
+        "卡片头高 30px 左右, 从左到右: 红黄绿三灯 + kind-tag + title + status badge + ⋯ 菜单",
+        "status badge 颜色映射: idle 灰 / run amber / ok 绿 / err 红",
+        "双击卡片头切换 collapsed 状态, 折叠后只显示卡片头"
+      ],
+      "props": {
+        "card": "AgentCardState",
+        "onKill": "() => void",
+        "onDelete": "() => void",
+        "onDuplicate": "() => void",
+        "onFullscreen": "() => void"
+      },
+      "dependencies": ["T013", "T014"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "kind=main 时左侧条颜色为 var(--green)",
+        "status=run 时 badge 为 amber，status=err 时为 red",
+        "双击卡片头切换 collapsed：折叠后 .term 区不渲染",
+        "⋯ 菜单含 Duplicate / Kill / Delete 项",
+        "Vitest 测试 4 种 status badge 颜色 + collapsed 切换"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T023",
+      "type": "component",
+      "name": "TaskRow",
+      "filePath": "workspace/src/features/kanban/components/TaskRow.tsx",
+      "description": "单条任务行：id + title（双击就地编辑）+ status badge（点击弹下拉切换）+ rules chips + deps chips。status 变更调用 update_task_status IPC。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#任务与-Bug-管理",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (TaskRow 组件)",
+      "businessRules": [
+        "Task 按 lane 字段归到对应泳道 tasks 分区顶部, 按 id 字典序升序",
+        "点 status-badge 弹枚举下拉, 选完调 update_task_status(manifestPath, taskId, status), 写回对应 docs/tasks/*.json",
+        "写 JSON 时必须保持原文件 key 顺序和数组顺序, 只改动目标 task 对象的 status 字段",
+        "编辑 Task title (双击 title 文字进入编辑态): Enter 保存, Esc 取消"
+      ],
+      "props": {
+        "task": "Task",
+        "manifestPath": "string",
+        "onStatusChange": "(taskId: string, status: string) => void"
+      },
+      "dependencies": ["T004"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "点 status badge 弹 4 选枚举下拉，选中后触发 update_task_status IPC（mockIPC 验证）",
+        "双击 title 进入 input 编辑态，Enter 保存，Esc 还原",
+        "pending 红 / in-progress amber / done 绿 / blocked gray badge 色"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T024",
+      "type": "component",
+      "name": "Board (Workflow 看板)",
+      "filePath": "workspace/src/features/kanban/components/Board.tsx",
+      "description": "横向滚动 flex 容器，按 Workspace.commands 渲染 Lane + Connector 交替排列。高度 100vh-84px-28px。暗色主题横向滚动条样式。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#看板与泳道",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.board 段)",
+      "businessRules": [
+        "Board 区域横向滚动, 纵向固定高度 100vh - 84px - 28px",
+        "水平滚动条使用暗色主题样式 (高 10px, 轨道透明, thumb --line 色)"
+      ],
+      "props": {
+        "commands": "Command[]",
+        "tasks": "Task[]",
+        "agents": "SubAgent[]"
+      },
+      "dependencies": ["T020", "T021", "T022", "T023"],
+      "reuseComponents": ["Lane", "Connector", "AgentCard", "TaskRow"],
+      "acceptanceCriteria": [
+        "overflow-x: auto，不出现纵向滚动条",
+        "高度精确为 calc(100vh - 84px - 28px)",
+        "N 个命令渲染 N 条 Lane 和 N-1 条 Connector",
+        "主命令与 helper 命令均渲染（helper 在末端）"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T025",
+      "type": "component",
+      "name": "TweaksPanel",
+      "filePath": "workspace/src/features/tweaks/components/TweaksPanel.tsx",
+      "description": "右下角 Tweaks 面板。默认折叠为 24×24 绿色发光圆钮。展开后：Density / Helper lanes / Show descriptions / Column width / Accent / Theme / Reset 各组控件。改动写入 app_state.json（调 write_app_state IPC）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工具面板",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.tweaks 段) + app.jsx Tweaks",
+      "businessRules": [
+        "Tweaks 面板固定在右下角 14px, 宽 260px, 默认折叠为一个小圆钮 (24×24, 绿色发光点)",
+        "Density 段控件 (comfortable / compact 互斥), 改动后立即切换 padding/font-size",
+        "所有面板改动都写入 Rust 端 app_state.json (键 tweaks.<field>), 下次启动保留; 不写 localStorage",
+        "Theme (Dark / Light 互斥), Light 标「v2」灰化禁用, MVP 只有 Dark",
+        "Reset workflow 按钮点击弹二次确认, 确认后清 app_state.json 中除 recent_workspaces 外所有键并调 scan_workspace"
+      ],
+      "props": {},
+      "dependencies": ["T015"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "点小圆钮展开面板，再点关闭",
+        "Light theme 按钮 disabled 并标 v2",
+        "density 切换后 Board 区域 padding/font-size 立即变化",
+        "Reset 二次确认后调 IPC write_app_state（mockIPC 验证）"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T026",
+      "type": "page",
+      "name": "KanbanShell (就绪后完整页面)",
+      "filePath": "workspace/src/pages/KanbanShell.tsx",
+      "description": "组装 TopBar + PipelineStrip + Board/GenericBoard（按 layout 切换）+ RetroTimeline + TweaksPanel + 各抽屉。layout=workflow 时显示 PipelineStrip，layout=generic 时隐藏。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#看板与泳道",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (整页结构)",
+      "businessRules": [
+        "Layout 切换为 generic 时, PipelineStrip 隐藏",
+        "Layout Toggle 切换时, 顶栏 / RetroTimeline / 抽屉保持挂载不重渲"
+      ],
+      "props": {},
+      "dependencies": ["T016", "T019", "T024", "T025"],
+      "reuseComponents": ["TopBar", "PipelineStrip", "Board", "TweaksPanel"],
+      "acceptanceCriteria": [
+        "layout=workflow：TopBar + PipelineStrip + Board + RetroTimeline 均渲染",
+        "layout=generic：PipelineStrip 不渲染，GenericBoard 渲染（T055 接入）",
+        "抽屉组件保持挂载（display:none 隐藏，不 unmount）"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T027",
+      "type": "api",
+      "name": "Rust 路径安全校验 + 原子写",
+      "filePath": "workspace/src-tauri/src/fs/atomic.rs",
+      "description": "safe_path(path, root) → Result：canonicalize + 校验以 rootPath 开头，否则返回 PathOutOfWorkspace 错误。atomic_write(path, content)：写临时文件 → fsync → rename 覆盖，禁止 truncate+write 模式。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件系统集成",
+      "designRef": "",
+      "businessRules": [
+        "所有写操作先对 path 做 canonicalize, 然后校验结果是否以 workspace rootPath 开头, 否则拒绝",
+        "write_file 必须原子写: 写临时文件 → fsync → rename 覆盖原文件; 禁止 truncate + write"
+      ],
+      "props": {},
+      "dependencies": ["T005"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "路径穿越攻击（../../etc/passwd）被拒绝，返回 PathOutOfWorkspace",
+        "atomic_write 崩溃后无半写文件（测试：写入中断 → 原文件完整）",
+        "Rust 单元测试覆盖 safe_path 的合法/越权/不存在三种情况"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T028",
+      "type": "api",
+      "name": "Rust FS 命令 (读/写/创建/删除/重命名/frontmatter/task)",
+      "filePath": "workspace/src-tauri/src/commands/fs.rs",
+      "description": "实现 7 个 Tauri command：read_file_raw / write_file / create_file(+模板系统 prd/bug/command/rule) / delete_file / rename_file / update_frontmatter（保留键顺序注释，只改目标字段）/ update_task_status（保 JSON key 顺序，只改 status 字段）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件系统集成",
+      "designRef": "",
+      "businessRules": [
+        "update_frontmatter 解析 YAML 时保留键顺序、注释、空行, 仅改动目标字段; 正文 markdown 不重写",
+        "update_task_status 打开 tasks.json 后, 只改目标 task 对象的目标字段, 其他 key 顺序不变",
+        "写失败时 toast 必须展示具体原因 (PermissionDenied / DiskFull / NotFound / Other)"
+      ],
+      "props": {},
+      "dependencies": ["T027"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "update_frontmatter 对含注释的 YAML 文件操作后注释保留",
+        "update_task_status 只修改目标 task.status，其他 task 和字段不变",
+        "create_file template='prd' 创建含基础 frontmatter 的 PRD 模板文件",
+        "Rust 集成测试用 tempfile 验证所有命令"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T029",
+      "type": "api",
+      "name": "Rust app_state 持久化命令",
+      "filePath": "workspace/src-tauri/src/commands/app_state.rs",
+      "description": "实现 read_app_state / write_app_state（patch 语义：只改动传入字段，其他保留）。持久化文件放 Tauri AppData 目录。AppPersistentState 含 layout / recentWorkspaces / tweaks。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工具面板",
+      "designRef": "",
+      "businessRules": [
+        "所有面板改动都写入 Rust 端 app_state.json (键 tweaks.<field>), 下次启动保留; 不写 localStorage",
+        "Layout Toggle 选择持久化到 Rust 端 app_state.json (键 layout)"
+      ],
+      "props": {},
+      "dependencies": ["T006", "T027"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "write_app_state({ layout: 'generic' }) 后 read_app_state 返回 layout: 'generic'",
+        "write_app_state patch 语义：只传 tweaks.density 不影响 recentWorkspaces",
+        "文件不存在时 read_app_state 返回默认值"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T030",
+      "type": "wrapper",
+      "name": "前端 FS IPC wrappers",
+      "filePath": "workspace/src/features/fs/ipc/index.ts",
+      "description": "封装 readFileRaw / writeFile / createFile / deleteFile / renameFile / updateFrontmatter / updateTaskStatus / readAppState / writeAppState 九个 typed wrapper，调用走 IPC.Cmd.*，类型从 @/types/ipc 引入。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件系统集成",
+      "designRef": "",
+      "businessRules": [
+        "UI 采用乐观更新: 改动即刻反映到 UI, 后台写入; 写失败 toast 错误 + 回滚 UI"
+      ],
+      "props": {},
+      "dependencies": ["T003", "T004"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "所有 wrapper 有返回类型标注，无 any",
+        "writeFile 失败时 Promise reject（上层 catch + toast + rollback）"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T031",
+      "type": "component",
+      "name": "MarkdownEditor (textarea + 实时预览)",
+      "filePath": "workspace/src/components/MarkdownEditor.tsx",
+      "description": "左 textarea / 右 react-markdown 双栏编辑器。⌘S 保存，⌘Enter 保存关闭，Esc 放弃（有 dirty 弹确认）。dirty 状态小圆点徽章。检测 git merge conflict 标记切只读模式。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#PRD-预览与编辑",
+      "designRef": "",
+      "businessRules": [
+        "MVP 编辑器使用 <textarea> + 实时 react-markdown 预览, v2 换 CodeMirror 6",
+        "编辑态 ⌘S / Ctrl+S 调 write_file(filePath, content), 成功 toast「Saved」, 失败 toast「Save failed: {reason}」",
+        "Esc 键: 无 dirty 直接关模态; 有 dirty 弹确认「Discard changes?」, 确认后关闭",
+        "正文内检测到 git merge conflict 标记, 编辑器切换只读, 顶部横条提示「Resolve conflict first」"
+      ],
+      "props": {
+        "filePath": "string",
+        "initialContent": "string",
+        "onSave": "(content: string) => Promise<void>",
+        "onClose": "() => void"
+      },
+      "dependencies": ["T030"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "⌘S 触发 onSave，成功 toast Saved，失败 toast Save failed",
+        "包含 <<<<<<< 标记时 textarea 为 readonly，顶部横条可见",
+        "dirty 状态时 Esc 弹确认对话框",
+        "Vitest 测试 merge conflict 检测 + ⌘S 行为"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T032",
+      "type": "component",
+      "name": "PRDPreview 模态",
+      "filePath": "workspace/src/features/prd/components/PRDPreview.tsx",
+      "description": "从 PRDSelector 打开。默认只读 react-markdown 渲染。Edit 按钮切双栏编辑模式（复用 MarkdownEditor）。打开时记录 mtime，保存前重读 mtime，不一致弹 Keep mine / Use disk 对话框。写回后更新 frontmatter.updatedAt。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#PRD-预览与编辑",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (PRDPreview 组件)",
+      "businessRules": [
+        "在 PRDSelector 下拉点某条 PRD → 打开 PRDPreview 模态, 默认只读渲染 markdown",
+        "打开 PRD 时记录文件 mtime; 每次写回前先重读 mtime, 若与记录值不一致 (外部改过), 弹三选一对话框:「Keep mine / Use disk / Merge」, MVP 只实现前两个",
+        "写回时自动把 frontmatter 的 updatedAt 字段改为当前 ISO 时间",
+        "写回成功后重算 tbdCount, 顶栏 chip 和 PRDSelector 同步刷新"
+      ],
+      "props": {
+        "prd": "PRD",
+        "onClose": "() => void"
+      },
+      "dependencies": ["T031", "T010"],
+      "reuseComponents": ["MarkdownEditor"],
+      "acceptanceCriteria": [
+        "打开时显示 markdown 渲染，Edit 按钮可见",
+        "保存后 workspace.prds 中对应条目 tbdCount 更新",
+        "外部改动后保存弹 Keep mine / Use disk 对话框",
+        "updatedAt frontmatter 字段更新为 ISO 时间"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T033",
+      "type": "component",
+      "name": "RulesDrawer",
+      "filePath": "workspace/src/features/rules/components/RulesDrawer.tsx",
+      "description": "右侧滑入抽屉，宽 400px，backdrop-filter blur(3px)。规则按 P0→P1→P2 分组可折叠。priority badge 点击循环切换并调 update_frontmatter。底部 Violations 折叠区（MVP seed 3 条）。打开时禁用 Board 拖拽。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#规则抽屉",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (RulesDrawer 组件)",
+      "businessRules": [
+        "RulesDrawer 从屏幕右侧滑入, 宽 400px, 外层加背景模糊遮罩 (backdrop-filter: blur(3px))",
+        "规则列表按 priority 分组并排序 P0 → P1 → P2, 每组可折叠 (默认全展开)",
+        "每条 Rule 的 priority badge 点击可就地切换 (P0 ↔ P1 ↔ P2 循环), 保存调 update_frontmatter(path, { priority })",
+        "Drawer 打开时禁用看板的拖拽事件, 避免双 drag context 冲突"
+      ],
+      "props": {
+        "rules": "Rule[]",
+        "isOpen": "boolean",
+        "onClose": "() => void"
+      },
+      "dependencies": ["T015", "T030"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "isOpen=true 时从右侧滑入，backdrop 模糊可见",
+        "P0 规则在 P1 之前渲染",
+        "点击 priority badge 触发 update_frontmatter IPC（mockIPC 验证）",
+        "Drawer 打开时 Board 上的 draggable=false",
+        "Vitest 测试 priority 循环切换逻辑"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T034",
+      "type": "component",
+      "name": "DocsViewer 模态",
+      "filePath": "workspace/src/features/docs/components/DocsViewer.tsx",
+      "description": "800×600 模态，左 1/3 文件树 + 右 2/3 markdown 渲染。相对链接在模态内切换，外链调 Tauri shell API 打开浏览器。顶部全文搜索高亮。Esc 关闭并 localStorage 记住最后路径。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文档浏览器",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (DocsViewer 组件)",
+      "businessRules": [
+        "点顶栏 Docs 按钮弹模态, 尺寸 800×600 或 90vw/85vh 取小",
+        "markdown 内相对链接点击在本模态内切换文档, 不跳系统浏览器",
+        "外链 (http/https) 点击调 Tauri shell API 打开系统浏览器",
+        "Esc 关闭模态, 但下次打开保留最后浏览的文档路径 (存 localStorage)"
+      ],
+      "props": {
+        "docs": "StaticDoc[]",
+        "isOpen": "boolean",
+        "onClose": "() => void"
+      },
+      "dependencies": ["T015", "T030"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "模态尺寸不超过 90vw/85vh",
+        "相对链接点击不打开浏览器，切换文档树选中状态",
+        "http 链接点击调 open shell API（mockIPC 验证）",
+        "关闭后 localStorage 保存 lastDocPath，下次打开选中该文档"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T035",
+      "type": "api",
+      "name": "Rust notify watcher + workspace_changed 事件",
+      "filePath": "workspace/src-tauri/src/watcher/mod.rs",
+      "description": "start_watcher(path) 启动 notify-debouncer-mini，debounce 300ms（常量 WATCH_DEBOUNCE_MS = 300 在 watcher/constants.rs）。排除 .git/node_modules/dist/target。事件按 kind 分组（commands/prds/tasks 等），推送 workspace_changed event（payload：{kind, diff: {added, modified, deleted}}）。写入时白名单机制：write_file 前加入路径，300ms 后移除。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件系统集成",
+      "designRef": "",
+      "businessRules": [
+        "Watcher 基于 Rust notify crate, 监听整个 rootPath 递归, 排除 .git / node_modules / dist / target",
+        "事件 300ms debounce 聚合, 同一批变化合并成一个 workspace_changed event",
+        "写入前把目标文件加入 watcher 白名单, 写入完成 300ms 后再移除, 避免自己写触发自己 reload 循环",
+        "Watcher 启动失败时, 顶栏显示红色徽章「Watch offline」, 工具仍可用"
+      ],
+      "props": {},
+      "dependencies": ["T028"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "外部 fs::write 后 300-500ms 内前端收到 workspace_changed event",
+        "write_file 触发的文件变化被白名单过滤（不推 event）",
+        "start_watcher 失败返回 WatcherInit 错误，前端渲染 Watch offline 徽章",
+        "Rust 集成测试：tempfile 写文件 → 等待 event → 校验 diff.modified 包含该路径"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T036",
+      "type": "hook",
+      "name": "useWorkspaceWatcher (增量 store 更新)",
+      "filePath": "workspace/src/hooks/useWorkspaceWatcher.ts",
+      "description": "监听 workspace_changed Tauri event（IPC.Event.WORKSPACE_CHANGED），根据 kind + diff 做增量 store patch：只刷新受影响的 store 切片（commands/prds/tasks 等），不全量重扫。从 Rust 发事件到 DOM 可见 < 500ms。useEffect cleanup 必须 unlisten。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件系统集成",
+      "designRef": "",
+      "businessRules": [
+        "前端根据 diff 做增量更新, 只刷新受影响的 store 切片, 不触发全表重绘",
+        "从 Rust 发事件到 DOM 可见变化必须在 500ms 内完成"
+      ],
+      "props": {},
+      "dependencies": ["T010", "T015"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "useEffect cleanup 调用 unlisten（Vitest spy 验证）",
+        "kind='commands' 时只更新 workspaceStore.workspace.commands，不重绘整个 Board",
+        "未识别 kind 时 console.warn 不报错"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T037",
+      "type": "api",
+      "name": "Rust PTY 模块 (portable-pty)",
+      "filePath": "workspace/src-tauri/src/pty/mod.rs",
+      "description": "实现 pty_spawn(cwd, cols, rows) → ptyId（默认 shell 取 $SHELL，兜底 /bin/zsh，常量在 pty/config.rs）。同时实现 pty_write / pty_resize / pty_kill。pty_spawn 启动后开异步循环 read 输出，按 chunk 通过 pty_output 事件推前端。PTY 退出后推 pty_exit({ptyId, code})。同一 cardId 重复 spawn 时先 kill 旧进程。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#终端卡片",
+      "designRef": "",
+      "businessRules": [
+        "卡片创建时立即调用 pty_spawn(cwd, cols, rows) 拿到 ptyId, status 初始设为 idle",
+        "PTY 输出按 chunk 通过 pty_output event 推送, 不在 Rust 端做任何过滤",
+        "收到 pty_exit 事件后, 根据 code: 0 → ok, 非 0 → err",
+        "卡片销毁时必须调 pty_kill(ptyId), 否则 Rust 端资源泄漏",
+        "resize 失败时记 warn 日志, 不向前端报错"
+      ],
+      "props": {},
+      "dependencies": ["T005"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "pty_spawn 后 pty_write('ls\\n') 在 pty_output 事件中收到文件列表",
+        "pty_kill 后无僵尸进程（ps 验证）",
+        "pty_exit code=0 时前端收到 {code: 0}",
+        "Rust 集成测试：spawn sh -c echo hi → pty_output 包含 hi → pty_exit code=0"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T038",
+      "type": "wrapper",
+      "name": "前端 PTY IPC wrappers",
+      "filePath": "workspace/src/features/terminal/ipc/index.ts",
+      "description": "封装 spawnPty / writePty / resizePty / killPty 四个 typed wrapper，调用走 IPC.Cmd.*，类型从 @/types/ipc 引入。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#终端卡片",
+      "designRef": "",
+      "businessRules": [],
+      "props": {},
+      "dependencies": ["T003", "T004"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "spawnPty 返回 Promise<string>（ptyId）",
+        "TypeScript 编译无错误"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T039",
+      "type": "hook",
+      "name": "usePtySession",
+      "filePath": "workspace/src/features/terminal/hooks/usePtySession.ts",
+      "description": "管理单个 PTY 会话生命周期。mount 时调 spawnPty 拿 ptyId，监听 pty_output（xterm.write）和 pty_exit（更新 status）。卡片 unmount 时 cleanup 调 killPty + unlisten。PTY 启动前收到的 pty_output 缓存到队列，xterm 挂载后一次性 flush。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#终端卡片",
+      "designRef": "",
+      "businessRules": [
+        "xterm 的 onData 回调调 pty_write(ptyId, data) 把用户输入发回",
+        "收到 pty_exit 事件后, 根据 code: 0 → ok, 非 0 → err",
+        "PTY 启动前若收到 pty_output 事件, 前端要缓存 data 队列, 等 xterm 实例挂载后一次性 flush",
+        "卡片销毁时必须调 pty_kill(ptyId), 否则 Rust 端资源泄漏"
+      ],
+      "props": {},
+      "dependencies": ["T038", "T014"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "unmount 时 killPty 被调用（Vitest spy + mockIPC 验证）",
+        "pty_exit code=0 → updateCardStatus(id, 'ok')，code≠0 → 'err'",
+        "mount 前到达的 pty_output 数据在 xterm 挂载后被 write（缓存 flush 测试）",
+        "unlisten 在 cleanup 中执行"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T040",
+      "type": "component",
+      "name": "Terminal (xterm.js 封装)",
+      "filePath": "workspace/src/features/terminal/components/Terminal.tsx",
+      "description": "封装 xterm Terminal 实例 + FitAddon + WebLinksAddon。useEffect mount 时 open(el)，onData → 回调给 usePtySession。窗口 resize 时调 fitAddon.fit() 并触发 resizePty。cleanup 时 xterm.dispose()。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#终端卡片",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-terminal.jsx",
+      "businessRules": [
+        "窗口 resize 时按 size.cols = Math.floor(width / 8), size.rows = Math.floor(height / 20) 调 pty_resize",
+        "订阅 pty_output 事件, data 段用 xterm.write(data) 写入终端"
+      ],
+      "props": {
+        "ptyId": "string | null",
+        "onData": "(data: string) => void",
+        "onResize": "(cols: number, rows: number) => void"
+      },
+      "dependencies": ["T039"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "xterm 实例挂载后可见光标",
+        "onData 回调在 xterm.onData 触发时被调用",
+        "窗口 resize 后 onResize 收到新 cols/rows（Math.floor 计算）",
+        "cleanup 时 xterm.dispose() 被调用（spy 验证）"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T041",
+      "type": "component",
+      "name": "AgentCard 完整版 (含终端 + resize + 全屏)",
+      "filePath": "workspace/src/features/kanban/components/AgentCard.tsx",
+      "description": "在 T022 骨架基础上集成 Terminal 组件 + usePtySession。添加：resize handle（右下角拖拽，最小 220×160，最大 900×800）/ 全屏模态入口 / Shift/Cmd 多选 / PTY 启动时 status 设为 run。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#终端卡片",
+      "designRef": "docs/designs/claude-workflow-kanban/card.jsx (resize/drag 行为)",
+      "businessRules": [
+        "卡片创建时立即调用 pty_spawn(cwd, cols, rows) 拿到 ptyId, status 初始设为 idle",
+        "卡片右下角有一个 SVG resize handle, 鼠标拖动改 size, 最小 220×160, 最大 900×800",
+        "Fullscreen 弹系统模态, 900×620 或 90vw/85vh 取小, 同一 PTY 实例不重开",
+        "Shift / Cmd + 点击实现多选, 顶栏浮出批量操作条 (Kill all / Delete all)"
+      ],
+      "props": {
+        "card": "AgentCardState",
+        "cwd": "string",
+        "onKill": "() => void",
+        "onDelete": "() => void",
+        "onDuplicate": "() => void"
+      },
+      "dependencies": ["T022", "T039", "T040"],
+      "reuseComponents": ["Terminal", "usePtySession"],
+      "acceptanceCriteria": [
+        "卡片挂载后 PTY 启动，xterm 可见",
+        "resize handle 拖拽后 size 在 220×160 ~ 900×800 范围内",
+        "全屏模态同一 PTY 不重开（ptyId 相同）",
+        "Shift+点击后 selectedCardIds 包含该卡片"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T042",
+      "type": "component",
+      "name": "FullscreenModal",
+      "filePath": "workspace/src/components/FullscreenModal.tsx",
+      "description": "通用全屏模态（focus-veil + focus-box），900×620 或 90vw/85vh 取小。Esc 或点遮罩关闭，PTY 不断。供 AgentCard 和 GenericCard 共用。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#终端卡片",
+      "designRef": "",
+      "businessRules": [
+        "Fullscreen 弹系统模态 (focus-veil + focus-box), 900×620 或 90vw/85vh 取小, 同一 PTY 实例不重开",
+        "模态内 Esc 或点遮罩关闭; 关闭后卡片回到原位置, PTY 不断"
+      ],
+      "props": {
+        "isOpen": "boolean",
+        "onClose": "() => void",
+        "children": "React.ReactNode"
+      },
+      "dependencies": [],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "点遮罩调 onClose",
+        "Esc 键调 onClose",
+        "宽不超过 min(900px, 90vw)，高不超过 min(620px, 85vh)"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T043",
+      "type": "hook",
+      "name": "useCardDragDrop (跨泳道拖拽)",
+      "filePath": "workspace/src/features/kanban/hooks/useCardDragDrop.ts",
+      "description": "HTML5 DnD API 封装。onDragStart 写入 cardId，onDragOver 高亮目标泳道，onDrop 调用 store.rebindCard(cardId, newLaneId)。拖入 gate 泳道时 toast 提示。松手在 Board 外时无操作。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#看板与泳道",
+      "designRef": "",
+      "businessRules": [
+        "卡片跨泳道拖拽时: PTY 保留 (ptyId 不变), 仅修改 AgentCardState.laneId 并刷新 UI; 不动任何文件",
+        "拖拽过程中目标泳道 lane-body 应用 .drop-active 样式 (浅绿底 + inset 边框)",
+        "卡片被拖入 gate 泳道 (非主命令) 时允许, 但顶部 toast「This lane is a gate; content here is informational」"
+      ],
+      "props": {},
+      "dependencies": ["T014"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "拖拽后 card.laneId 更新，card.ptyId 不变",
+        "drop 在 Board 外时 card.laneId 不变",
+        "拖入 gate 泳道出现 toast 提示（Vitest + mockIPC）"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T044",
+      "type": "hook",
+      "name": "useMultiSelect (多选 + 框选)",
+      "filePath": "workspace/src/features/kanban/hooks/useMultiSelect.ts",
+      "description": "Shift/Cmd+点击卡片加入 selectedCardIds。鼠标按住空白区拖框绘制选区矩形，松手后矩形内所有卡片加入选中集。多选后顶栏浮出批量操作条（Kill all / Delete all）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#终端卡片",
+      "designRef": "",
+      "businessRules": [
+        "Shift / Cmd + 点击实现多选, 顶栏浮出批量操作条 (Kill all / Delete all)",
+        "鼠标按住空白区拖框实现框选, 矩形内所有卡片加入选中集"
+      ],
+      "props": {},
+      "dependencies": ["T014"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "Cmd+click 两张卡片后 selectedCardIds.size === 2",
+        "框选时渲染半透明矩形选区",
+        "selectedCardIds.size > 0 时顶栏批量操作条可见"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T045",
+      "type": "component",
+      "name": "RetroTimeline",
+      "filePath": "workspace/src/features/retro/components/RetroTimeline.tsx",
+      "description": "固定底部，默认 28px 高显示最新 audit 摘要。点击展开 120px，横向圆点时间轴（按日期升序）。点节点弹 markdown 模态。drift 颜色：0 绿/1-3 amber/>3 红。键盘 Left/Right 切换节点。+ new retro 按钮在 /meta-audit 泳道新建卡并 auto-run。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#回溯时间轴",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (RetroTimeline 组件)",
+      "businessRules": [
+        "RetroTimeline 固定在 Board 底部, 默认高度 28px (仅显示一行摘要)",
+        "点击展开到 120px, 横向列出所有 Retrospective 节点 (圆点 + 日期 + 三个小徽章 drift/dead/commits)",
+        "节点按日期升序从左往右排, 最新的在右",
+        "drift 数字颜色: 0 绿 / 1-3 amber / >3 红",
+        "键盘 Left/Right 切换选中节点 (展开态下)"
+      ],
+      "props": {
+        "retrospectives": "Retrospective[]"
+      },
+      "dependencies": ["T010"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "默认高度 28px，点击后 120px",
+        "drift=0 节点徽章绿色，drift=4 红色",
+        "节点按日期升序排列",
+        "空数据时显示 No retros yet 提示",
+        "Left/Right 键切换 selectedNode"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T046",
+      "type": "component",
+      "name": "BugList (Bug reports in /fix lane)",
+      "filePath": "workspace/src/features/kanban/components/BugList.tsx",
+      "description": "/fix 泳道专用组件，展示 BugReport 列表。按 priority 降序（P0>P1>P2），同级按 createdAt 降序。每行：reporter 头像（首字母 + 随机色）+ priority badge + title + status badge（点击切换）。右键 Delete 带二次确认。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#任务与-Bug-管理",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (BugList 组件)",
+      "businessRules": [
+        "BugReport 全部汇集到 /fix 泳道, 按 priority 降序 (P0 > P1 > P2), 同 priority 按 createdAt 降序",
+        "BugReport 的 status 切换同样调 update_frontmatter(path, { status })",
+        "BugReport 左侧显示 reporter 头像占位 (姓名首字母 + 随机背景色, 悬停 tooltip 显示全名)"
+      ],
+      "props": {
+        "bugReports": "BugReport[]",
+        "onStatusChange": "(path: string, status: string) => void",
+        "onDelete": "(path: string) => void"
+      },
+      "dependencies": ["T010", "T030"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "P0 在 P1 之前渲染",
+        "点 status badge 触发 update_frontmatter IPC（mockIPC 验证）",
+        "reporter 头像显示首字母，悬停 tooltip 显示全名",
+        "Delete 需二次确认后调 delete_file IPC"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T047",
+      "type": "model",
+      "name": "GenericBoard TS + Rust 类型",
+      "filePath": "workspace/src/types/ipc.ts",
+      "description": "在 ipc.ts 补充 GenericBoard / GenericColumn / GenericCard / AppPersistentState。在 Rust 端新建 workspace/src-tauri/src/models/generic_board.rs 定义对应 struct（derive Serialize/Deserialize，camelCase）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通用看板视图",
+      "designRef": "docs/designs/claude-workflow-kanban/Terminal Kanban.html + app.jsx",
+      "businessRules": [
+        "GenericBoard 持久化到 workspace 根目录的 .claude/.kanban-board.json",
+        "GenericBoard.version: 1 用于 schema 迁移"
+      ],
+      "props": {},
+      "dependencies": ["T004", "T006"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "GenericCard.bootCommands: string[] 已定义",
+        "GenericCard.size?: { w?: number; h?: number } 已定义",
+        "Rust struct 与 TS 接口字段完全对应"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T048",
+      "type": "api",
+      "name": "Rust 通用看板命令",
+      "filePath": "workspace/src-tauri/src/commands/generic_board.rs",
+      "description": "实现 read_generic_board(path) / write_generic_board(path, board) / get_layout / set_layout 四个命令。read 时若文件不存在，返回系统预置 4 列初始数据。JSON 损坏时备份原文件并重置，推 toast 事件通知前端。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通用看板视图",
+      "designRef": "",
+      "businessRules": [
+        "首次进入无 .kanban-board.json 时, 用系统预置 4 列 + 0 卡片初始化, 写入新文件",
+        ".kanban-board.json 损坏 (JSON parse fail) 时备份原文件为 .kanban-board.json.bak.<ts>, 用预置初始化, 顶栏 toast「Board reset due to corrupt file」",
+        "整张 GenericBoard 序列化为 JSON 写到 workspace 内的 .claude/.kanban-board.json"
+      ],
+      "props": {},
+      "dependencies": ["T027", "T047"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "文件不存在时返回 4 列预置数据（不报错）",
+        "损坏 JSON 时备份文件存在，返回预置数据",
+        "set_layout / get_layout 与 app_state.json 中 layout 字段联动"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T049",
+      "type": "wrapper",
+      "name": "前端通用看板 IPC wrappers",
+      "filePath": "workspace/src/features/generic-board/ipc/index.ts",
+      "description": "封装 readGenericBoard / writeGenericBoard / getLayout / setLayout 四个 typed wrapper。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通用看板视图",
+      "designRef": "",
+      "businessRules": [],
+      "props": {},
+      "dependencies": ["T003", "T047"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "writeGenericBoard 接受 GenericBoard 类型参数",
+        "TypeScript 编译无错误"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T050",
+      "type": "store",
+      "name": "useGenericBoardStore",
+      "filePath": "workspace/src/stores/useGenericBoardStore.ts",
+      "description": "管理 GenericBoard 状态。actions：load（调 readGenericBoard）/ addCard / removeCard / moveCard(cardId, colId) / addColumn / removeColumn / renameColumn / updateCardSize / updateCardTitle。写操作后 debounce 200ms 调 writeGenericBoard 持久化。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通用看板视图",
+      "designRef": "",
+      "businessRules": [
+        "卡片支持鼠标拖拽到任意列, 释放时 card.col 立即更新; 跨列拖拽不杀 PTY, 仅改归属",
+        "通用看板的所有改动立即写回 .kanban-board.json",
+        "列 title 改成空字符串时拒绝保存, inline 提示「Title cannot be empty」"
+      ],
+      "props": {},
+      "dependencies": ["T047", "T049"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "moveCard 只改 card.col，card.ptyId 不变",
+        "renameColumn('', ...) 返回错误，不更新 store",
+        "写操作后 200ms debounce 调 writeGenericBoard（spy 验证）",
+        "Vitest 测试 moveCard / addColumn / removeColumn（含有卡片时移到 backlog）"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T051",
+      "type": "component",
+      "name": "GenericColumn",
+      "filePath": "workspace/src/features/generic-board/components/GenericColumn.tsx",
+      "description": "通用看板列。标题可就地编辑。右上 × 删除（含卡片时弹 Delete N cards or move them to backlog?）。宽度由 Tweaks columnWidth 决定（narrow=240 / standard=320 / wide=440）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通用看板视图",
+      "designRef": "docs/designs/claude-workflow-kanban/Terminal Kanban.html (.col 段) + app.jsx Column",
+      "businessRules": [
+        "列宽根据 Tweaks 中 columnWidth (narrow=240px / standard=320px / wide=440px) 全局生效",
+        "列右上 × 删除该列; 若列内有卡片, 弹确认对话框「Delete N cards or move them to backlog?」",
+        "系统预置 4 列, id / title / color 固定: backlog/ready/running/done; 用户可重命名 title, 不能改 id 与 color token"
+      ],
+      "props": {
+        "column": "GenericColumn",
+        "cardCount": "number",
+        "isPreset": "boolean",
+        "onRename": "(title: string) => void",
+        "onDelete": "() => void"
+      },
+      "dependencies": ["T050"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "isPreset=true 时 color 不可编辑",
+        "有卡片时删除弹确认对话框",
+        "标题就地编辑空字符串时显示 inline 错误",
+        "宽度响应 Tweaks.columnWidth 变化"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T052",
+      "type": "component",
+      "name": "GenericCard",
+      "filePath": "workspace/src/features/generic-board/components/GenericCard.tsx",
+      "description": "通用看板卡片。集成 Terminal 组件 + usePtySession。左上红黄绿灯（红=Delete含确认/黄=Reset PTY/绿=Maximize）。标题双击就地编辑。desc 受 Tweaks showDescriptions 控制。resize 手柄（双击重置）。进入 running 列时 bootCommands 自动注入。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通用看板视图",
+      "designRef": "docs/designs/claude-workflow-kanban/app.jsx GenericCard + terminal.jsx",
+      "businessRules": [
+        "卡片首次进入 running 列时, 若 bootCommands 非空, 依次 pty_write 并各跟一个 \\r; 不在其他列触发",
+        "卡片 status 由其绑定的 PTY 自动驱动: 无 PTY → idle; spawn 后 → run; PTY exit code 0 → ok; exit code != 0 → err",
+        "卡片 desc 段在 Tweaks showDescriptions = false 时隐藏",
+        "卡片右下角 12×12 resize 手柄, 拖拽改 card.size, 释放时持久化; 双击手柄重置为默认尺寸"
+      ],
+      "props": {
+        "card": "GenericCard",
+        "onMove": "(cardId: string, colId: string) => void",
+        "onDelete": "(cardId: string) => void"
+      },
+      "dependencies": ["T039", "T040", "T050"],
+      "reuseComponents": ["Terminal", "usePtySession"],
+      "acceptanceCriteria": [
+        "进入 running 列（col 变为 'running'）后 bootCommands 依次注入",
+        "showDescriptions=false 时 desc 元素不渲染",
+        "resize 双击后 size 重置为 undefined",
+        "绿灯点击打开 FullscreenModal"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T053",
+      "type": "component",
+      "name": "GenericBoard",
+      "filePath": "workspace/src/features/generic-board/components/GenericBoard.tsx",
+      "description": "通用看板容器。useEffect mount 时 load board。横向列排列 + 列间卡片拖拽（HTML5 DnD）。顶部「+ Column」按钮。切回 Workflow 时保活 PTY（不 unmount Terminal，改 visibility）。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通用看板视图",
+      "designRef": "docs/designs/claude-workflow-kanban/Terminal Kanban.html (整页) + app.jsx Board",
+      "businessRules": [
+        "Layout 切换为 generic 时, Board 区域改用通用看板, PipelineStrip 隐藏",
+        "切回 Workflow 视图时, generic 卡片对应的 PTY 不被销毁 (后台保活)",
+        "拖到自己所在列视为无操作, 不写盘, 不闪屏"
+      ],
+      "props": {},
+      "dependencies": ["T050", "T051", "T052"],
+      "reuseComponents": ["GenericColumn", "GenericCard"],
+      "acceptanceCriteria": [
+        "mount 时调用 readGenericBoard（mockIPC 验证）",
+        "切到 Workflow 后再切回，卡片 PTY 仍活跃（ptyId 不变）",
+        "拖到同列不触发 moveCard 和 write",
+        "顶部 + Column 按钮打开输入框"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T054",
+      "type": "hook",
+      "name": "useKeyboardShortcuts",
+      "filePath": "workspace/src/hooks/useKeyboardShortcuts.ts",
+      "description": "注册全局键盘快捷键：⌘O → pickWorkspaceFolder、⌘W → close workspace（返回 empty）、⌘S → 当前聚焦编辑器保存。通过 Tauri menu API 或 document keydown 监听，shortcuts 常量集中定义。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工作区接入",
+      "designRef": "",
+      "businessRules": [],
+      "props": {},
+      "dependencies": ["T009", "T010"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "⌘O 触发 pickWorkspaceFolder（mockIPC 验证）",
+        "⌘W 触发 useWorkspaceStore.reset()",
+        "cleanup 时移除 keydown listener"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T055",
+      "type": "component",
+      "name": "ErrorBoundary + Toast 系统",
+      "filePath": "workspace/src/components/ErrorBoundary.tsx",
+      "description": "React ErrorBoundary 捕获渲染层错误显示 fallback 页。Toast 组件从 useToastStore 读取消息队列，2 种变体（success/error），auto-dismiss 3s。顶栏 Watch offline 红色徽章条件渲染。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#文件系统集成",
+      "designRef": "",
+      "businessRules": [
+        "Watcher 启动失败时, 顶栏显示红色徽章「Watch offline」",
+        "前端连续 IPC 失败 > 3 次弹系统级 banner「Backend unresponsive, restart suggested」"
+      ],
+      "props": {},
+      "dependencies": ["T015"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "Toast error 显示 3s 后自动消失",
+        "ErrorBoundary 捕获 throw 后渲染 fallback 而非白屏",
+        "Watch offline 徽章在 watcherFailed=true 时显示"
+      ],
+      "status": "pending"
+    },
+    {
+      "taskId": "T056",
+      "type": "component",
+      "name": "RecentWorkspacesList",
+      "filePath": "workspace/src/features/workspace/components/RecentWorkspacesList.tsx",
+      "description": "Empty 状态页内展示最多 5 条最近工作区，每条显示路径最后两段。点击触发 validate + scan 流程。失效路径显示删除线样式并提供 × 移除按钮。",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#工作区接入",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (WorkspaceShell 空状态)",
+      "businessRules": [
+        "应用启动后, 若 get_recent_workspaces 返回空数组, 进入 empty 状态并显示欢迎页",
+        "最近工作区记录已失效 (路径消失) 时自动从 recentWorkspaces 中剔除该条, 进入 empty 状态"
+      ],
+      "props": {
+        "recents": "string[]",
+        "onSelect": "(path: string) => void",
+        "onRemove": "(path: string) => void"
+      },
+      "dependencies": ["T010"],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "最多渲染 5 条",
+        "路径显示为最后两段",
+        "× 按钮触发 onRemove",
+        "recents=[] 时不渲染列表"
+      ],
+      "status": "pending"
+    }
+  ]
+}

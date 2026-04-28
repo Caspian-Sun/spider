@@ -9,9 +9,9 @@
 | 模块代号 | `claude-workflow-kanban`                                                      |
 | 负责人   | Tommy (suntao0518@gmail.com)                                                  |
 | 创建日期 | 2026-04-24                                                                    |
-| 最后更新 | 2026-04-24                                                                    |
+| 最后更新 | 2026-04-28                                                                    |
 | 状态     | draft                                                                         |
-| 关联产物 | 旧稿 `PRD.md` (Claude Design 输出, 本 PRD 为官方重组版本, 见下方设计稿章节) |
+| 关联产物 | 旧稿 `PRD.md` (Claude Design 输出, 本 PRD 为官方重组版本, 见下方设计稿章节); v1.1 同步 spider (2) 原型: 新增 Terminal Kanban 通用看板视图与 Layout Toggle |
 
 ## 背景与目标
 
@@ -48,9 +48,12 @@
 | ---------- | ------------------------------------------------------------------------------- |
 | 来源类型   | file (本地 HTML + JSX 原型, 已归档到 `docs/designs/claude-workflow-kanban/`)   |
 | Figma 链接 | (无)                                                                            |
-| 本地文件   | `docs/designs/claude-workflow-kanban/Workflow Kanban.html` (主设计文件 + CSS 变量源) |
-|            | `docs/designs/claude-workflow-kanban/wf-app.jsx` (Board / Lane / AgentCard / 各抽屉的 React 结构) |
-|            | `docs/designs/claude-workflow-kanban/wf-terminal.jsx` (终端卡片与 slash 命令脚本) |
+| 本地文件   | `docs/designs/claude-workflow-kanban/Workflow Kanban.html` (**主设计文件 — 流水线泳道视图**, CSS 变量源) |
+|            | `docs/designs/claude-workflow-kanban/Terminal Kanban.html` (**通用看板视图** — Backlog/Ready/Running/Done 自由拖拽) |
+|            | `docs/designs/claude-workflow-kanban/wf-app.jsx` (Workflow 视图: Board / Lane / AgentCard / 各抽屉的 React 结构) |
+|            | `docs/designs/claude-workflow-kanban/wf-terminal.jsx` (Workflow 视图终端卡片与 slash 命令脚本) |
+|            | `docs/designs/claude-workflow-kanban/app.jsx` (Generic 视图: 列 / 卡片 / 拖拽 / Tweaks 面板) |
+|            | `docs/designs/claude-workflow-kanban/terminal.jsx` (Generic 视图卡片内终端) |
 |            | `docs/designs/claude-workflow-kanban/shell.jsx` (Fake shell 原型, 仅供交互参考) |
 |            | `docs/designs/claude-workflow-kanban/card.jsx` (卡片拖拽 / resize / 右键菜单行为) |
 | MCP 配置   | 未接入 (Figma 无资源, 不需要 figma-mcp)                                          |
@@ -61,7 +64,7 @@
 | ------------------- | -------------------------------------------------------------------- |
 | #工作区接入         | `wf-app.jsx` → `WorkspaceShell` + 4 种 state 组件                    |
 | #文件扫描           | `wf-app.jsx` 中 `SEED_*` 常量 (将被真实扫描结果替换)                 |
-| #顶栏               | `Workflow Kanban.html` `.topbar` + `wf-app.jsx` `TopBar` / `PRDSelector` |
+| #顶栏               | `Workflow Kanban.html` `.topbar` + `wf-app.jsx` `TopBar` / `PRDSelector` (含 Layout Toggle) |
 | #流水线条           | `Workflow Kanban.html` `.pipeline`                                   |
 | #看板与泳道         | `Workflow Kanban.html` `.board` + `.lane` + `.connector`             |
 | #终端卡片           | `wf-terminal.jsx` + `wf-app.jsx` `AgentCard` + `card.jsx` 拖拽行为   |
@@ -71,7 +74,8 @@
 | #任务与-Bug         | `wf-app.jsx` `TaskRow` + `/fix` 泳道里的 `BugList`                   |
 | #回溯时间轴         | `wf-app.jsx` `RetroTimeline`                                         |
 | #文件系统集成       | (无视觉帧, 后端能力为主)                                             |
-| #工具面板           | `Workflow Kanban.html` `.tweaks`                                     |
+| #工具面板           | `Workflow Kanban.html` `.tweaks` + `app.jsx` Tweaks 编辑模式         |
+| #通用看板视图       | `Terminal Kanban.html` 整页 + `app.jsx` Board / Card / Tweaks + `terminal.jsx` |
 
 > **归档**: 设计稿已按规范放入 `docs/designs/claude-workflow-kanban/`, 路径为本仓库根目录的相对路径。原始来源是 Claude Design 工具一次性导出的 HTML + JSX 原型, 不再增量维护。
 
@@ -211,6 +215,7 @@ frontmatter schema 见「附录 D · frontmatter 最小 schema」。
 | stats chip    | 实时计算: `cards.filter(c => c.status === 'run').length`            |
 | Rules 按钮    | `Workspace.rules.length` + violations 数                            |
 | Docs 按钮     | 静态                                                                |
+| Layout Toggle | `useLayoutStore.layout` (`workflow` / `generic`)                    |
 
 ### 业务规则
 
@@ -225,6 +230,9 @@ frontmatter schema 见「附录 D · frontmatter 最小 schema」。
 9. 点 Rules 按钮打开 RulesDrawer; 点 Docs 按钮打开 DocsViewer
 10. Reset 按钮点击弹二次确认「这会重新扫描 workspace, 丢失未保存的 UI 状态」, 确认后清 localStorage 并重新扫描, 不删任何用户文件
 11. Run 按钮 MVP 灰化禁用, v2 实现「一键跑全流水线」
+12. Layout Toggle 是位于 stats chip 与 Rules 按钮之间的图标按钮组 (icon: `columns` / `grid`), 默认高亮 `workflow` (流水线泳道); 点击切换为 `generic` (通用看板, 见 #通用看板视图)
+13. Layout Toggle 切换时, 主体 Board 区域整体替换 (流水线 ↔ 通用看板), 顶栏 / RetroTimeline / 抽屉保持挂载不重渲
+14. Layout Toggle 选择持久化到 Rust 端 `app_state.json` (键 `layout`), 下次启动恢复; 不写入 localStorage
 
 ### 数据契约
 
@@ -676,13 +684,16 @@ frontmatter schema 见「附录 D · frontmatter 最小 schema」。
 
 1. Tweaks 面板固定在右下角 14px, 宽 260px, 默认折叠为一个小圆钮 (24×24, 绿色发光点)
 2. 点小圆钮展开为面板, 顶部标题「TWEAKS」, 面板关闭按钮 `×`
-3. 面板包含三个分组, 顺序固定: Density / Helper lanes / Theme / Reset
-4. Density 段控件 (comfortable / compact 互斥), 选中态绿色, 改动后立即切换所有 lane-body 的 padding / font-size
-5. Helper lanes (Show / Hide 互斥), 隐藏时 Board 只渲染主 pipeline 泳道
-6. Theme (Dark / Light 互斥), Light 标「v2」灰化禁用, MVP 只有 Dark
-7. 所有面板改动都写入 localStorage, key 形如 `wfkanban.tweaks.{field}`, 下次启动保留
-8. Reset workflow 按钮点击弹二次确认「Clear all UI state and rescan?」, 确认后清 localStorage 并调 `scan_workspace`
-9. 面板任何改动立即生效, 无 Apply 按钮
+3. 面板分组顺序固定: Density / Helper lanes (workflow 视图独有) / Show descriptions (generic 视图独有) / Column width (generic 视图独有) / Accent / Theme / Reset
+4. Density 段控件 (comfortable / compact 互斥), 选中态绿色, 改动后立即切换 lane-body 与 generic card 的 padding / font-size
+5. Helper lanes (Show / Hide 互斥), 隐藏时 Board 只渲染主 pipeline 泳道; **仅 workflow 视图可见**
+6. Show descriptions (Y / N), 控制 generic 看板卡片是否显示 desc 段; **仅 generic 视图可见**
+7. Column width (narrow / standard / wide 三档, 默认 standard); **仅 generic 视图可见**
+8. Theme (Dark / Light 互斥), Light 标「v2」灰化禁用, MVP 只有 Dark
+9. 所有面板改动都写入 Rust 端 `app_state.json` (键 `tweaks.<field>`), 下次启动保留; **不写 localStorage**
+10. Reset workflow 按钮点击弹二次确认「Clear all UI state and rescan?」, 确认后清 `app_state.json` 中除 `recent_workspaces` 外所有键并调 `scan_workspace`
+11. 面板任何改动立即生效, 无 Apply 按钮
+12. Tweaks 编辑模式 (设计稿 `app.jsx` `EDITMODE-BEGIN/END`): 仅在 `npm run dev` 时显示, 生产构建移除
 
 ### 数据契约
 
@@ -697,9 +708,88 @@ frontmatter schema 见「附录 D · frontmatter 最小 schema」。
 
 ---
 
+## 功能点 14: 通用看板视图
+
+### 用户故事
+
+作为开发者, 我希望除了「按命令流水线排泳道」的 Workflow 视图, 也能切到一个**通用看板** (Backlog / Ready / Running / Done) 自由组织终端会话, 适合一次性脚本、监控任务、临时实验等不属于 8 步法流程的工作。
+
+### 字段定义
+
+通用看板视图以 `GenericBoard` 数据模型驱动 (与 Workflow 视图的 `Workspace.commands / tasks` 是**两套并行模型**, 互不干扰):
+
+| 字段              | 类型                                            | 必填 | 校验规则                                  | 默认值          |
+| ----------------- | ----------------------------------------------- | ---- | ----------------------------------------- | --------------- |
+| columns           | `GenericColumn[]`                               | 是   | 至少 1 列, 最多 8 列                      | 系统预置 4 列   |
+| cards             | `GenericCard[]`                                 | 否   | 卡片 `col` 必须命中 columns 中某条 `id`   | []              |
+| `GenericColumn.id`| string                                          | 是   | 全 board 内唯一, snake_case 或 kebab-case | -               |
+| `GenericColumn.title` | string                                      | 是   | 1–24 字符                                 | -               |
+| `GenericColumn.color` | string                                      | 是   | 必须命中 Design Token (见 #顶栏 token 表) | `--text-3`      |
+| `GenericCard.id`  | string                                          | 是   | 全 board 内唯一                           | nanoid(8)       |
+| `GenericCard.col` | string                                          | 是   | 命中某条 column                           | 第一列 id       |
+| `GenericCard.title` | string                                        | 是   | 1–60 字符                                 | -               |
+| `GenericCard.desc`| string                                          | 否   | <= 200 字符                               | ''              |
+| `GenericCard.status` | enum `idle/run/ok/err`                       | 是   | -                                         | `idle`          |
+| `GenericCard.bootCommands` | string[]                              | 否   | 卡片首次 spawn 时按顺序 inject 给 PTY     | []              |
+| `GenericCard.size` | `{ w?: number, h?: number }`                  | 否   | 单位 px, 由 resize 拖拽产生               | -               |
+
+> 持久化: 整张 `GenericBoard` 序列化为 JSON 写到 workspace 内的 `.claude/.kanban-board.json` (用户手动 `.gitignore` 决定是否追踪)。**不使用 localStorage**。
+
+### 业务规则
+
+1. Layout 切换为 `generic` 时, Board 区域改用通用看板, 顶栏 / RetroTimeline / 抽屉保持挂载; PipelineStrip **隐藏** (生成式 + 流水线概念在通用看板里不存在)
+2. 系统预置 4 列, `id` / `title` / `color` 固定: `backlog`(`--text-3`) / `ready`(`--blue`) / `running`(`--amber`) / `done`(`--green`); 用户可重命名 `title`, **不能改 `id` 与 `color` token**
+3. 顶栏「+ Column」按钮新增列, 弹简单输入框收 `title`, `id` 自动从 `title` slugify (重名加后缀 `-2`)
+4. 列右上 `×` 删除该列; 若列内有卡片, 弹确认对话框「Delete N cards or move them to backlog?」, 用户选移动则全部 `col = 'backlog'`
+5. 列宽根据 Tweaks 中 `columnWidth` (narrow=240px / standard=320px / wide=440px) 全局生效
+6. 卡片支持鼠标拖拽到任意列, 释放时 `card.col` 立即更新; 拖拽过程中目标列高亮; 跨列拖拽**不杀 PTY**, 仅改归属
+7. 卡片支持框选 (鼠标按住空白拖出选区) 与 cmd/ctrl+click 多选, 多选状态下批量拖拽 / Kill / Delete
+8. 卡片右下角 12×12 resize 手柄, 拖拽改 `card.size.{w,h}`, 释放时持久化; 双击手柄重置为默认尺寸
+9. 卡片左上角红黄绿灯 (macOS 样式): 红=Delete (含确认) / 黄=Reset PTY / 绿=Maximize (展开成全屏卡片)
+10. 卡片标题双击就地编辑, 失焦保存; ESC 取消改动
+11. 卡片 desc 段在 Tweaks `showDescriptions = false` 时隐藏 (节省纵向空间)
+12. 卡片 `status` 由其绑定的 PTY 自动驱动: 无 PTY → `idle`; spawn 后 → `run`; PTY exit code 0 → `ok`; exit code != 0 → `err`
+13. 卡片首次进入 `running` 列时, 若 `bootCommands` 非空, 依次 `pty_write` 并各跟一个 `\r`; **不在其他列触发**
+14. 顶栏「+ Card」在当前选中列追加新卡, 默认 `title = 'untitled'`, `status = 'idle'`
+15. 设计稿 `card.jsx` 中的 Focus Overlay (双击卡片标题进入大窗口模式) MVP 实现; 关闭后回到原列原位
+16. 通用看板的所有改动 (列变更 / 卡片增删 / 拖拽 / resize / 重命名) 立即写回 `.kanban-board.json`, 走原子写 (#文件系统集成 R1)
+17. 切回 Workflow 视图时, generic 卡片对应的 PTY **不被销毁** (后台保活); 切回时 PTY 仍能读到完整 scrollback
+
+### 数据契约 (Tauri command)
+
+| 业务操作                | command                  | 参数                                      | 返回                       |
+| ----------------------- | ------------------------ | ----------------------------------------- | -------------------------- |
+| 读取 generic board      | `read_generic_board`     | `path: string` (workspace root)           | `GenericBoard`             |
+| 写入 generic board      | `write_generic_board`    | `path: string, board: GenericBoard`       | `()`                       |
+| 切换 layout             | `set_layout`             | `layout: 'workflow' \| 'generic'`         | `()`                       |
+| 读取 layout             | `get_layout`             | -                                         | `'workflow' \| 'generic'`  |
+
+> PTY 相关命令 (`pty_spawn` / `pty_write` / `pty_resize` / `pty_kill`) 与 Workflow 视图完全共用, 不重复定义。
+
+### 交互流程
+
+```
+用户在顶栏点 Layout Toggle → set_layout('generic') → set Zustand layout 状态
+  → useGenericBoardStore.load() → read_generic_board → 渲染列与卡片
+  → 用户拖拽卡片 → 更新 store → write_generic_board (debounce 200ms)
+切回 → set_layout('workflow') → 卡片对应 PTY 后台保活
+```
+
+### 异常场景
+
+| 场景                          | 预期行为                                                   |
+| ----------------------------- | ---------------------------------------------------------- |
+| 首次进入无 `.kanban-board.json` | 用系统预置 4 列 + 0 卡片初始化, 写入新文件                |
+| `.kanban-board.json` 损坏 (JSON parse fail) | 备份原文件为 `.kanban-board.json.bak.<ts>`, 用预置初始化, 顶栏 toast「Board reset due to corrupt file」 |
+| 拖到自己所在列                | 视为无操作, 不写盘, 不闪屏                                 |
+| 卡片对应 PTY 已退出           | 卡片显示状态点为 ok/err, 列拖拽仍可用; 双击「绿灯」复活 PTY |
+| 列 `title` 改成空字符串       | 拒绝保存, inline 提示「Title cannot be empty」             |
+
+---
+
 ## 验收清单
 
-> 分 6 个里程碑 (M1 ~ M6), 总计 17 天; 每个里程碑有独立验收点。
+> 分 6 个里程碑 (M1 ~ M6), 总计 18 天 (M5 因加入通用看板视图从 2d → 3d); 每个里程碑有独立验收点。
 
 ### 里程碑 1 · 壳与扫描 (M1, 3d)
 
@@ -745,14 +835,17 @@ frontmatter schema 见「附录 D · frontmatter 最小 schema」。
 - [ ] Tasks JSON 改 status → 对应行颜色实时变
 - [ ] **验收**: 外部编辑器改文件, 桌面端 UI 在 500ms 内更新
 
-### 里程碑 5 · 交互完善 (M5, 2d)
+### 里程碑 5 · 交互完善 + 通用看板 (M5, 3d)
 
-- [ ] 终端卡片跨泳道拖拽
+- [ ] 终端卡片跨泳道拖拽 (Workflow 视图)
 - [ ] 多选框选 + 批量操作 (Kill all / Delete all)
 - [ ] RetroTimeline 展开 / 收起 + 节点点击弹详情
 - [ ] Bug reports 在 `/fix` 泳道正确列出, 状态切换可用
-- [ ] 全屏终端模态
-- [ ] **验收**: 设计稿里所有交互都能跑
+- [ ] 全屏终端模态 (Workflow + Generic 共用)
+- [ ] **通用看板视图 (Terminal Kanban)**: 列增删 / 卡片拖拽 / 多选 / resize / 双击编辑 / Focus overlay 全部可用
+- [ ] 顶栏 Layout Toggle 切换 workflow ↔ generic, PTY 后台保活
+- [ ] `read_generic_board` / `write_generic_board` / `set_layout` / `get_layout` 跑通, 改动立刻原子写回 `.kanban-board.json`
+- [ ] **验收**: 在 generic 视图里建 5 张卡跑不同命令, 拖到 running 列自动 spawn; 切到 workflow 视图改 PRD 再切回 generic, 卡片状态保留
 
 ### 里程碑 6 · 打磨 (M6, 2d)
 
@@ -784,6 +877,8 @@ frontmatter schema 见「附录 D · frontmatter 最小 schema」。
 - 浅色主题 (v2)
 - 应用级撤销 `⌘Z` (v2, MVP 依赖 git 做撤销)
 - git 内嵌 diff viewer (v2)
+- 通用看板的 `WIP limits` / Swimlane 嵌套 / 卡片自定义颜色 (v2)
+- 通用看板与 Workflow 视图之间的卡片互转 (v2, 模型不同)
 - 协作编辑 / 云同步 (永不做, 本工具是本地单机工具)
 
 ---
@@ -918,6 +1013,47 @@ export interface AgentCardState {
   status: 'idle' | 'run' | 'ok' | 'err';
   ptyId: string | null;
 }
+
+// ─── 通用看板视图 (Terminal Kanban) ──────────────────
+// 与 Workflow 视图并存, 数据独立, 持久化到 .claude/.kanban-board.json
+
+export type Layout = 'workflow' | 'generic';
+
+export interface GenericBoard {
+  columns: GenericColumn[];
+  cards: GenericCard[];
+  version: 1;                  // schema 版本, 升级时迁移
+}
+
+export interface GenericColumn {
+  id: string;                  // backlog / ready / running / done / 用户自定义
+  title: string;
+  color: string;               // Design Token CSS 变量名 (如 'var(--blue)')
+}
+
+export interface GenericCard {
+  id: string;                  // nanoid(8)
+  col: string;                 // 命中 GenericColumn.id
+  title: string;
+  desc: string;
+  status: 'idle' | 'run' | 'ok' | 'err';
+  bootCommands: string[];      // 进入 'running' 列时按序 inject
+  size?: { w?: number; h?: number };
+  ptyId?: string | null;       // 后台保活的 PTY id (跨 layout 切换不丢)
+}
+
+export interface AppPersistentState {
+  layout: Layout;              // 上次选择的视图
+  recentWorkspaces: string[];  // 最近 5 个
+  tweaks: {
+    density: 'compact' | 'comfortable';
+    showHelperLanes: boolean;
+    showDescriptions: boolean;
+    columnWidth: 'narrow' | 'standard' | 'wide';
+    accent: 'green' | 'blue' | 'purple';
+    theme: 'dark' | 'light';
+  };
+}
 ```
 
 ---
@@ -1012,6 +1148,14 @@ workflow-kanban/
 #[tauri::command] async fn rename_file(from: String, to: String) -> Result<(), String>;
 #[tauri::command] async fn update_frontmatter(path: String, patch: serde_json::Value) -> Result<(), String>;
 #[tauri::command] async fn update_task_status(manifest_path: String, task_id: String, status: String) -> Result<(), String>;
+
+// 通用看板 / 持久化状态
+#[tauri::command] async fn read_generic_board(path: String) -> Result<GenericBoard, String>;
+#[tauri::command] async fn write_generic_board(path: String, board: GenericBoard) -> Result<(), String>;
+#[tauri::command] async fn get_layout() -> Layout;             // 'workflow' | 'generic'
+#[tauri::command] async fn set_layout(layout: Layout) -> Result<(), String>;
+#[tauri::command] async fn read_app_state() -> AppPersistentState;
+#[tauri::command] async fn write_app_state(patch: serde_json::Value) -> Result<(), String>;
 ```
 
 **事件** (Rust → JS):
@@ -1131,9 +1275,61 @@ commits: 17
 
 ---
 
+## 附录 E · 通用看板 schema
+
+**`.claude/.kanban-board.json`** (通用看板视图持久化文件, 由工具自动维护):
+
+```json
+{
+  "version": 1,
+  "columns": [
+    { "id": "backlog", "title": "Backlog", "color": "var(--text-3)" },
+    { "id": "ready",   "title": "Ready",   "color": "var(--blue)" },
+    { "id": "running", "title": "Running", "color": "var(--amber)" },
+    { "id": "done",    "title": "Done",    "color": "var(--green)" }
+  ],
+  "cards": [
+    {
+      "id": "c1",
+      "col": "backlog",
+      "title": "scrape-prices.py",
+      "desc": "Poll 3 marketplaces every 5 min and dedupe results.",
+      "status": "idle",
+      "bootCommands": ["ls", "cat README.md"],
+      "size": { "w": 320, "h": 220 }
+    }
+  ]
+}
+```
+
+**`<app-data-dir>/app_state.json`** (Tauri AppData 目录, 跨 workspace 共享):
+
+```json
+{
+  "layout": "workflow",
+  "recentWorkspaces": [
+    "/Users/tommy/code/claude-code-workflow",
+    "/Users/tommy/code/spider"
+  ],
+  "tweaks": {
+    "density": "comfortable",
+    "showHelperLanes": true,
+    "showDescriptions": true,
+    "columnWidth": "standard",
+    "accent": "green",
+    "theme": "dark"
+  }
+}
+```
+
+> 写入策略统一走 #文件系统集成 R1 (临时文件 + rename 原子写)。
+
+---
+
 ## 变更记录
 
 | 日期       | 变更内容                                                                                    | 变更人 |
 | ---------- | ------------------------------------------------------------------------------------------- | ------ |
 | 2026-04-24 | 初版: 从 Claude Design 输出 (`PRD.md` + `Workflow Kanban.html`) 重组, 按 `docs/prds/_template.md` 格式拆分为 13 个功能点并逐条标明可测业务规则 | Tommy  |
-| 2026-04-27 | 设计稿归档到 `docs/designs/claude-workflow-kanban/`, 路径全部改为仓库相对路径 | Tommy  |
+| 2026-04-27 | 设计稿归档到 `docs/designs/claude-workflow-kanban/`, 路径全部改为仓库相对路径               | Tommy  |
+| 2026-04-28 | 同步 spider (2) 原型: 新增 #通用看板视图 (Terminal Kanban, Backlog/Ready/Running/Done 通用泳道); 顶栏新增 Layout Toggle (workflow ↔ generic 双视图共存); 工具面板分组扩展 (showDescriptions / columnWidth / accent); 持久化迁移到 Rust 端 `app_state.json` 与 workspace 内 `.claude/.kanban-board.json`, 不再写 localStorage; Tauri command 新增 `read_generic_board` / `write_generic_board` / `get_layout` / `set_layout` / `read_app_state` / `write_app_state`; 验收清单 M5 从 2d → 3d (总工期 17d → 18d); 数据模型补 `Layout` / `GenericBoard` / `GenericColumn` / `GenericCard` / `AppPersistentState` 类型; 新增附录 E 描述持久化文件 schema | Tommy  |
