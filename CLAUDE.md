@@ -1,4 +1,4 @@
-# 项目配置 - Claude Workflow Kanban (Tauri 桌面端)
+# 项目配置 - Spider (Tauri 桌面端)
 
 > Claude Code 入职培训。详细规则拆分在 `.claude/rules/` 下，按需读取。
 > 遇到具体场景时，先读对应规则文件再执行。
@@ -9,10 +9,10 @@
 
 本项目分两层:
 
-| 层级           | 目录                              | 职责                                                       |
-| -------------- | --------------------------------- | ---------------------------------------------------------- |
-| **根目录**     | `.claude/` / `docs/` / `CLAUDE.md` | AI 自动化框架 (命令/规则/PRD/任务) — 与 `claude-code-workflow` 主仓库共用一套八步法 |
-| **workspace/** | `workspace/src/` / `workspace/src-tauri/` / ... | 实际产品代码 (Tauri 2 桌面端工程, Rust 后端 + React 前端) |
+| 层级           | 目录                                            | 职责                                                                                |
+| -------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **根目录**     | `.claude/` / `docs/` / `CLAUDE.md`              | AI 自动化框架 (命令/规则/PRD/任务) — 与 `claude-code-workflow` 主仓库共用一套八步法 |
+| **workspace/** | `workspace/src/` / `workspace/src-tauri/` / ... | 实际产品代码 (Tauri 2 桌面端工程, Rust 后端 + React 前端)                           |
 
 根目录的 `pnpm dev` / `pnpm tauri:build` 等命令通过 `pnpm --prefix workspace` 代理到 `workspace/` 执行, 用户无需手动 cd。
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Claude Workflow Kanban",
+  "productName": "Spider",
   "version": "0.0.0",
   "identifier": "com.tommy.claude-workflow-kanban",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Claude Workflow Kanban",
+        "title": "Spider",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
