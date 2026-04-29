@@ -1,0 +1,51 @@
+.container {
+  position: fixed;
+  top: 48px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 1000;
+  max-width: 360px;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-2);
+  font-size: 12px;
+  animation: slideIn 0.15s ease;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+.message {
+  flex: 1;
+  color: var(--text);
+}
+
+.dismiss {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.info    { border-color: var(--line-2); }
+.success { border-color: var(--green);  }
+.warning { border-color: var(--amber);  }
+.error   { border-color: var(--red);    }
+
+.error   .message { color: var(--red);   }
+.warning .message { color: var(--amber); }
+.success .message { color: var(--green); }

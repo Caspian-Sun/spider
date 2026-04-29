@@ -1,0 +1,55 @@
+.veil {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.box {
+  width: min(900px, 90vw);
+  height: min(620px, 85vh);
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.title {
+  flex: 1;
+  font-size: 13px;
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.closeBtn {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--text-3);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.closeBtn:hover { border-color: var(--line-2); color: var(--text); }
+
+.content {
+  flex: 1;
+  overflow: hidden;
+}

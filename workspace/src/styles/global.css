@@ -1,27 +1,79 @@
 /**
- * 全局样式入口 — 与设计稿 docs/designs/claude-workflow-kanban/Workflow Kanban.html 中的 :root CSS 变量保持一致.
- * Design Token 数值同步在 src/styles/tokens.ts.
+ * 全局样式入口 — CSS 变量与设计稿 docs/designs/claude-workflow-kanban/Workflow Kanban.html :root 完全对齐
+ * Design Token 数值引用见 src/styles/tokens.ts
  */
+
 :root {
-  --bg: #0e1117;
-  --panel: #161b22;
-  --text: #c9d1d9;
-  --text-mute: #8b949e;
-  --green: #5db075;
-  --teal: #2aa198;
-  --yellow: #d4a017;
-  --red: #c93c20;
-  --gray: #586069;
-  --font-sm: 13px;
-  --font-md: 14px;
+  /* 背景层次 */
+  --bg:   #07080a;
+  --bg-1: #0c0d10;
+  --bg-2: #121418;
+  --bg-3: #171a1f;
+  --bg-4: #1d2128;
+
+  /* 分割线 */
+  --line:   #23262d;
+  --line-2: #2d3139;
+
+  /* 文字层次 */
+  --text:   #e6e9ef;
+  --text-2: #a5acba;
+  --text-3: #6b7280;
+
+  /* 色彩 */
+  --green:  #6ee77f;
+  --amber:  #ffb547;
+  --red:    #ff6b6b;
+  --blue:   #7aa2ff;
+  --purple: #c39bff;
+  --pink:   #ff8bd0;
+  --teal:   #5eead4;
+
+  /* 字体族 */
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: 'Inter', system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html,
-body,
-#root {
-  height: 100%;
+body {
   margin: 0;
+  padding: 0;
+  height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-size: var(--font-md);
+  font-family: var(--sans);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+#root {
+  height: 100vh;
+}
+
+/* 暗色横向滚动条 (Board 区域) */
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--line-2);
 }

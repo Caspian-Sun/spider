@@ -38,14 +38,16 @@
         "一切可变值通过 Design Token 引入，严禁写死颜色/字号/间距"
       ],
       "props": {},
-      "dependencies": ["T001"],
+      "dependencies": [
+        "T001"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "tokens.ts 导出 colorGreen / colorTeal / colorAmber / colorRed / colorBlue / fontSm / laneWidth 等",
         "CSS 变量 --green / --teal / --amber / --red / --blue 已在 global.css :root 定义",
         "没有任何组件文件含 style={{ color: '#' }} 或 className 中裸色值"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T003",
@@ -59,14 +61,16 @@
         "Tauri command 名 / event 名必须用常量管理，一处拼错全链路断"
       ],
       "props": {},
-      "dependencies": ["T001"],
+      "dependencies": [
+        "T001"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "IPC.Cmd.SCAN_WORKSPACE / PICK_WORKSPACE_FOLDER / VALIDATE_WORKSPACE / GET_RECENT_WORKSPACES 等均已定义",
         "IPC.Event.SCAN_PROGRESS / WORKSPACE_CHANGED / PTY_OUTPUT / PTY_EXIT 均已定义",
         "全仓库无 invoke('scan_workspace') 这类裸字符串调用"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T004",
@@ -80,7 +84,9 @@
         "TypeScript 类型必须与 Rust struct 一一对应，任何字段改动必须先改 Rust 再改 TS"
       ],
       "props": {},
-      "dependencies": ["T001"],
+      "dependencies": [
+        "T001"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "WorkspaceState = 'empty' | 'scanning' | 'invalid' | 'ready' 已定义",
@@ -89,7 +95,7 @@
         "GenericBoard / GenericColumn / GenericCard / AppPersistentState 已定义",
         "无 any / unknown 类型使用"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T005",
@@ -104,14 +110,16 @@
         "命令处理函数内一律用 ? + Result，不用 unwrap"
       ],
       "props": {},
-      "dependencies": ["T001"],
+      "dependencies": [
+        "T001"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "AppError derive Serialize，前端 catch 到 JSON 对象而非 [object Object]",
         "cargo check 通过，无 unwrap 在 command 函数中",
         "PathOutOfWorkspace 变体存在且被路径校验逻辑触发"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T006",
@@ -126,14 +134,16 @@
         "Command 按 idx 升序排主 pipeline; idx 为 null 或 helper: true 的进入 helper 区"
       ],
       "props": {},
-      "dependencies": ["T005"],
+      "dependencies": [
+        "T005"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "serde_json::to_string(&workspace) 不 panic",
         "Command.idx 类型为 Option<u32>，Task.status 类型为枚举",
         "与 workspace/src/types/ipc.ts 字段完全对应"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T007",
@@ -150,7 +160,10 @@
         "invalid 状态下点击 Pick another 回到 empty 状态, 当前路径不写入 recentWorkspaces"
       ],
       "props": {},
-      "dependencies": ["T005", "T006"],
+      "dependencies": [
+        "T005",
+        "T006"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "pick_workspace_folder 取消时返回 Err（前端 catch 后保持状态不变）",
@@ -158,7 +171,7 @@
         "get_recent_workspaces 剔除不存在路径，最多返回 5 个",
         "Rust 单元测试覆盖 validate_workspace 的 valid/invalid 两条路径"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T008",
@@ -176,7 +189,9 @@
         "遍历 docs/prds/*.md, tbdCount = 正文中 [TBD] 字符串的出现次数"
       ],
       "props": {},
-      "dependencies": ["T006"],
+      "dependencies": [
+        "T006"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "扫描 claude-code-workflow 仓库后 Workspace.commands 含正确数量的命令",
@@ -185,7 +200,7 @@
         "1000 文件 workspace 冷扫描 < 2s",
         "Rust 集成测试用 tempfile 模拟目录结构验证解析结果"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T009",
@@ -199,14 +214,17 @@
         "不允许在组件内直接调 invoke()，必须通过 wrapper 函数"
       ],
       "props": {},
-      "dependencies": ["T003", "T004"],
+      "dependencies": [
+        "T003",
+        "T004"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "所有函数有 JSDoc @description/@module/@prdRef",
         "TypeScript 编译无错误",
         "无裸 invoke('scan_workspace') 字符串"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T010",
@@ -222,7 +240,10 @@
         "scan 完成后自动进入 ready 状态, 并把 rootPath 写入 recentWorkspaces 头部"
       ],
       "props": {},
-      "dependencies": ["T004", "T009"],
+      "dependencies": [
+        "T004",
+        "T009"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "phase 初始值为 empty",
@@ -230,7 +251,7 @@
         "Vitest 测试覆盖状态转换路径：empty→scanning→ready / empty→scanning→invalid",
         "无 any 类型"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T011",
@@ -247,7 +268,9 @@
         "ready 状态下顶栏右侧的 Close workspace 按钮返回 empty 状态, 保留 recentWorkspaces"
       ],
       "props": {},
-      "dependencies": ["T010"],
+      "dependencies": [
+        "T010"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "phase=empty 时渲染 Open folder 按钮，无 Close workspace",
@@ -256,7 +279,7 @@
         "phase=ready 时渲染 KanbanShell（内容暂占位，T026 实现）",
         "Vitest + @testing-library/react 测试 4 个 phase 分支渲染"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T012",
@@ -270,13 +293,15 @@
         "应用启动后, 若有最近工作区记录, 默认打开最近一个并自动进入 scanning 状态"
       ],
       "props": {},
-      "dependencies": ["T011"],
+      "dependencies": [
+        "T011"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "App 渲染不报错",
         "启动时调用 getRecentWorkspaces，有结果则自动触发 scan"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T013",
@@ -292,13 +317,15 @@
         "Board 区域高度 100vh - 84px - 28px"
       ],
       "props": {},
-      "dependencies": ["T002"],
+      "dependencies": [
+        "T002"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "LANE_WIDTH = 360, HELPER_LANE_WIDTH = 320",
         "CARD_KIND_COLOR.main = 'var(--green)', .sub = 'var(--purple)', .skill = 'var(--teal)', .hook = 'var(--amber)'"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T014",
@@ -312,14 +339,16 @@
         "卡片跨泳道拖拽时: PTY 保留 (ptyId 不变), 仅修改 AgentCardState.laneId 并刷新 UI; 不动任何文件"
       ],
       "props": {},
-      "dependencies": ["T004"],
+      "dependencies": [
+        "T004"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "rebindCard 只改 laneId，ptyId 不变",
         "removeCard 时，若 ptyId 非 null，store 不自动 kill（由组件负责调 pty_kill）",
         "Vitest 测试 rebindCard / addCard / removeCard"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T015",
@@ -334,14 +363,16 @@
         "所有面板改动都写入 Rust 端 app_state.json (键 tweaks.<field>), 下次启动保留; 不写 localStorage"
       ],
       "props": {},
-      "dependencies": ["T004"],
+      "dependencies": [
+        "T004"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "layout 默认值 'workflow'",
         "useDrawerStore.openRules() 后 isRulesOpen = true",
         "useToastStore.add() 追加消息，dismiss() 移除"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T016",
@@ -361,7 +392,11 @@
       "props": {
         "Props": "无 props，全部从 useWorkspaceStore / useKanbanStore / useLayoutStore 取数据"
       },
-      "dependencies": ["T010", "T014", "T015"],
+      "dependencies": [
+        "T010",
+        "T014",
+        "T015"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "高度精确 46px，position: fixed / sticky，z-index 在 Board 之上",
@@ -370,7 +405,7 @@
         "Rules 数量为 workspace.rules.length",
         "Vitest 测试路径 chip 点击 → clipboard mock 被调用"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T017",
@@ -390,7 +425,10 @@
         "onPrdSelect": "(prdId: string) => void",
         "onNewPrd": "() => void"
       },
-      "dependencies": ["T010", "T015"],
+      "dependencies": [
+        "T010",
+        "T015"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "tbdCount > 0 时显示 amber 气泡，= 0 时不显示",
@@ -398,7 +436,7 @@
         "无 PRD 时渲染 No PRD yet",
         "新建 PRD 后新 id 自动成为 activePrdId"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T018",
@@ -414,7 +452,9 @@
         "Layout Toggle 选择持久化到 Rust 端 app_state.json (键 layout), 不写入 localStorage"
       ],
       "props": {},
-      "dependencies": ["T015"],
+      "dependencies": [
+        "T015"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "默认 workflow 按钮高亮",
@@ -422,7 +462,7 @@
         "切换调用 IPC set_layout（mockIPC 验证）",
         "TopBar 和 RetroTimeline 不重新挂载（key 不变）"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T019",
@@ -445,7 +485,10 @@
         "selectedLaneId": "string | null",
         "onStepClick": "(commandId: string) => void"
       },
-      "dependencies": ["T010", "T014"],
+      "dependencies": [
+        "T010",
+        "T014"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "只渲染 helper:false 且 idx 非 null 的命令",
@@ -454,7 +497,7 @@
         "helper 命令放在 | 分隔符后",
         "Vitest 测试 done/active/no-tasks 三种 step 样式"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T020",
@@ -479,7 +522,10 @@
         "isSelected": "boolean",
         "onAddCard": "() => void"
       },
-      "dependencies": ["T013", "T014"],
+      "dependencies": [
+        "T013",
+        "T014"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "helper lane 有虚线边框，宽度 320px",
@@ -488,7 +534,7 @@
         "artifact tags 输入蓝色、输出绿色",
         "分区 label 无数据时不渲染"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T021",
@@ -507,14 +553,16 @@
         "isGate": "boolean",
         "artifactLabel": "string | null"
       },
-      "dependencies": ["T002"],
+      "dependencies": [
+        "T002"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "isGate=true 时 SVG stroke 颜色为 var(--amber)，显示 ◆",
         "artifactLabel 非 null 时中央显示文字",
         "宽度精确 52px"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T022",
@@ -538,7 +586,10 @@
         "onDuplicate": "() => void",
         "onFullscreen": "() => void"
       },
-      "dependencies": ["T013", "T014"],
+      "dependencies": [
+        "T013",
+        "T014"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "kind=main 时左侧条颜色为 var(--green)",
@@ -547,7 +598,7 @@
         "⋯ 菜单含 Duplicate / Kill / Delete 项",
         "Vitest 测试 4 种 status badge 颜色 + collapsed 切换"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T023",
@@ -568,14 +619,16 @@
         "manifestPath": "string",
         "onStatusChange": "(taskId: string, status: string) => void"
       },
-      "dependencies": ["T004"],
+      "dependencies": [
+        "T004"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "点 status badge 弹 4 选枚举下拉，选中后触发 update_task_status IPC（mockIPC 验证）",
         "双击 title 进入 input 编辑态，Enter 保存，Esc 还原",
         "pending 红 / in-progress amber / done 绿 / blocked gray badge 色"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T024",
@@ -594,15 +647,25 @@
         "tasks": "Task[]",
         "agents": "SubAgent[]"
       },
-      "dependencies": ["T020", "T021", "T022", "T023"],
-      "reuseComponents": ["Lane", "Connector", "AgentCard", "TaskRow"],
+      "dependencies": [
+        "T020",
+        "T021",
+        "T022",
+        "T023"
+      ],
+      "reuseComponents": [
+        "Lane",
+        "Connector",
+        "AgentCard",
+        "TaskRow"
+      ],
       "acceptanceCriteria": [
         "overflow-x: auto，不出现纵向滚动条",
         "高度精确为 calc(100vh - 84px - 28px)",
         "N 个命令渲染 N 条 Lane 和 N-1 条 Connector",
         "主命令与 helper 命令均渲染（helper 在末端）"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T025",
@@ -620,7 +683,9 @@
         "Reset workflow 按钮点击弹二次确认, 确认后清 app_state.json 中除 recent_workspaces 外所有键并调 scan_workspace"
       ],
       "props": {},
-      "dependencies": ["T015"],
+      "dependencies": [
+        "T015"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "点小圆钮展开面板，再点关闭",
@@ -628,7 +693,7 @@
         "density 切换后 Board 区域 padding/font-size 立即变化",
         "Reset 二次确认后调 IPC write_app_state（mockIPC 验证）"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T026",
@@ -643,14 +708,24 @@
         "Layout Toggle 切换时, 顶栏 / RetroTimeline / 抽屉保持挂载不重渲"
       ],
       "props": {},
-      "dependencies": ["T016", "T019", "T024", "T025"],
-      "reuseComponents": ["TopBar", "PipelineStrip", "Board", "TweaksPanel"],
+      "dependencies": [
+        "T016",
+        "T019",
+        "T024",
+        "T025"
+      ],
+      "reuseComponents": [
+        "TopBar",
+        "PipelineStrip",
+        "Board",
+        "TweaksPanel"
+      ],
       "acceptanceCriteria": [
         "layout=workflow：TopBar + PipelineStrip + Board + RetroTimeline 均渲染",
         "layout=generic：PipelineStrip 不渲染，GenericBoard 渲染（T055 接入）",
         "抽屉组件保持挂载（display:none 隐藏，不 unmount）"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T027",
@@ -665,14 +740,16 @@
         "write_file 必须原子写: 写临时文件 → fsync → rename 覆盖原文件; 禁止 truncate + write"
       ],
       "props": {},
-      "dependencies": ["T005"],
+      "dependencies": [
+        "T005"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "路径穿越攻击（../../etc/passwd）被拒绝，返回 PathOutOfWorkspace",
         "atomic_write 崩溃后无半写文件（测试：写入中断 → 原文件完整）",
         "Rust 单元测试覆盖 safe_path 的合法/越权/不存在三种情况"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T028",
@@ -688,7 +765,9 @@
         "写失败时 toast 必须展示具体原因 (PermissionDenied / DiskFull / NotFound / Other)"
       ],
       "props": {},
-      "dependencies": ["T027"],
+      "dependencies": [
+        "T027"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "update_frontmatter 对含注释的 YAML 文件操作后注释保留",
@@ -696,7 +775,7 @@
         "create_file template='prd' 创建含基础 frontmatter 的 PRD 模板文件",
         "Rust 集成测试用 tempfile 验证所有命令"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T029",
@@ -711,14 +790,17 @@
         "Layout Toggle 选择持久化到 Rust 端 app_state.json (键 layout)"
       ],
       "props": {},
-      "dependencies": ["T006", "T027"],
+      "dependencies": [
+        "T006",
+        "T027"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "write_app_state({ layout: 'generic' }) 后 read_app_state 返回 layout: 'generic'",
         "write_app_state patch 语义：只传 tweaks.density 不影响 recentWorkspaces",
         "文件不存在时 read_app_state 返回默认值"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T030",
@@ -732,13 +814,16 @@
         "UI 采用乐观更新: 改动即刻反映到 UI, 后台写入; 写失败 toast 错误 + 回滚 UI"
       ],
       "props": {},
-      "dependencies": ["T003", "T004"],
+      "dependencies": [
+        "T003",
+        "T004"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "所有 wrapper 有返回类型标注，无 any",
         "writeFile 失败时 Promise reject（上层 catch + toast + rollback）"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T031",
@@ -760,7 +845,9 @@
         "onSave": "(content: string) => Promise<void>",
         "onClose": "() => void"
       },
-      "dependencies": ["T030"],
+      "dependencies": [
+        "T030"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "⌘S 触发 onSave，成功 toast Saved，失败 toast Save failed",
@@ -768,7 +855,7 @@
         "dirty 状态时 Esc 弹确认对话框",
         "Vitest 测试 merge conflict 检测 + ⌘S 行为"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T032",
@@ -788,15 +875,20 @@
         "prd": "PRD",
         "onClose": "() => void"
       },
-      "dependencies": ["T031", "T010"],
-      "reuseComponents": ["MarkdownEditor"],
+      "dependencies": [
+        "T031",
+        "T010"
+      ],
+      "reuseComponents": [
+        "MarkdownEditor"
+      ],
       "acceptanceCriteria": [
         "打开时显示 markdown 渲染，Edit 按钮可见",
         "保存后 workspace.prds 中对应条目 tbdCount 更新",
         "外部改动后保存弹 Keep mine / Use disk 对话框",
         "updatedAt frontmatter 字段更新为 ISO 时间"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T033",
@@ -817,7 +909,10 @@
         "isOpen": "boolean",
         "onClose": "() => void"
       },
-      "dependencies": ["T015", "T030"],
+      "dependencies": [
+        "T015",
+        "T030"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "isOpen=true 时从右侧滑入，backdrop 模糊可见",
@@ -826,7 +921,7 @@
         "Drawer 打开时 Board 上的 draggable=false",
         "Vitest 测试 priority 循环切换逻辑"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T034",
@@ -847,7 +942,10 @@
         "isOpen": "boolean",
         "onClose": "() => void"
       },
-      "dependencies": ["T015", "T030"],
+      "dependencies": [
+        "T015",
+        "T030"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "模态尺寸不超过 90vw/85vh",
@@ -855,7 +953,7 @@
         "http 链接点击调 open shell API（mockIPC 验证）",
         "关闭后 localStorage 保存 lastDocPath，下次打开选中该文档"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T035",
@@ -872,7 +970,9 @@
         "Watcher 启动失败时, 顶栏显示红色徽章「Watch offline」, 工具仍可用"
       ],
       "props": {},
-      "dependencies": ["T028"],
+      "dependencies": [
+        "T028"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "外部 fs::write 后 300-500ms 内前端收到 workspace_changed event",
@@ -880,7 +980,7 @@
         "start_watcher 失败返回 WatcherInit 错误，前端渲染 Watch offline 徽章",
         "Rust 集成测试：tempfile 写文件 → 等待 event → 校验 diff.modified 包含该路径"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T036",
@@ -895,14 +995,17 @@
         "从 Rust 发事件到 DOM 可见变化必须在 500ms 内完成"
       ],
       "props": {},
-      "dependencies": ["T010", "T015"],
+      "dependencies": [
+        "T010",
+        "T015"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "useEffect cleanup 调用 unlisten（Vitest spy 验证）",
         "kind='commands' 时只更新 workspaceStore.workspace.commands，不重绘整个 Board",
         "未识别 kind 时 console.warn 不报错"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T037",
@@ -920,7 +1023,9 @@
         "resize 失败时记 warn 日志, 不向前端报错"
       ],
       "props": {},
-      "dependencies": ["T005"],
+      "dependencies": [
+        "T005"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "pty_spawn 后 pty_write('ls\\n') 在 pty_output 事件中收到文件列表",
@@ -928,7 +1033,7 @@
         "pty_exit code=0 时前端收到 {code: 0}",
         "Rust 集成测试：spawn sh -c echo hi → pty_output 包含 hi → pty_exit code=0"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T038",
@@ -938,15 +1043,20 @@
       "description": "封装 spawnPty / writePty / resizePty / killPty 四个 typed wrapper，调用走 IPC.Cmd.*，类型从 @/types/ipc 引入。",
       "prdRef": "docs/prds/claude-workflow-kanban.md#终端卡片",
       "designRef": "",
-      "businessRules": [],
+      "businessRules": [
+        "不允许在组件或 hook 内直接调 invoke()，所有 PTY 命令调用必须通过本 wrapper 函数"
+      ],
       "props": {},
-      "dependencies": ["T003", "T004"],
+      "dependencies": [
+        "T003",
+        "T004"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "spawnPty 返回 Promise<string>（ptyId）",
         "TypeScript 编译无错误"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T039",
@@ -963,7 +1073,10 @@
         "卡片销毁时必须调 pty_kill(ptyId), 否则 Rust 端资源泄漏"
       ],
       "props": {},
-      "dependencies": ["T038", "T014"],
+      "dependencies": [
+        "T038",
+        "T014"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "unmount 时 killPty 被调用（Vitest spy + mockIPC 验证）",
@@ -971,7 +1084,7 @@
         "mount 前到达的 pty_output 数据在 xterm 挂载后被 write（缓存 flush 测试）",
         "unlisten 在 cleanup 中执行"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T040",
@@ -990,7 +1103,9 @@
         "onData": "(data: string) => void",
         "onResize": "(cols: number, rows: number) => void"
       },
-      "dependencies": ["T039"],
+      "dependencies": [
+        "T039"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "xterm 实例挂载后可见光标",
@@ -998,7 +1113,7 @@
         "窗口 resize 后 onResize 收到新 cols/rows（Math.floor 计算）",
         "cleanup 时 xterm.dispose() 被调用（spy 验证）"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T041",
@@ -1021,15 +1136,22 @@
         "onDelete": "() => void",
         "onDuplicate": "() => void"
       },
-      "dependencies": ["T022", "T039", "T040"],
-      "reuseComponents": ["Terminal", "usePtySession"],
+      "dependencies": [
+        "T022",
+        "T039",
+        "T040"
+      ],
+      "reuseComponents": [
+        "Terminal",
+        "usePtySession"
+      ],
       "acceptanceCriteria": [
         "卡片挂载后 PTY 启动，xterm 可见",
         "resize handle 拖拽后 size 在 220×160 ~ 900×800 范围内",
         "全屏模态同一 PTY 不重开（ptyId 相同）",
         "Shift+点击后 selectedCardIds 包含该卡片"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T042",
@@ -1055,7 +1177,7 @@
         "Esc 键调 onClose",
         "宽不超过 min(900px, 90vw)，高不超过 min(620px, 85vh)"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T043",
@@ -1071,14 +1193,16 @@
         "卡片被拖入 gate 泳道 (非主命令) 时允许, 但顶部 toast「This lane is a gate; content here is informational」"
       ],
       "props": {},
-      "dependencies": ["T014"],
+      "dependencies": [
+        "T014"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "拖拽后 card.laneId 更新，card.ptyId 不变",
         "drop 在 Board 外时 card.laneId 不变",
         "拖入 gate 泳道出现 toast 提示（Vitest + mockIPC）"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T044",
@@ -1093,14 +1217,16 @@
         "鼠标按住空白区拖框实现框选, 矩形内所有卡片加入选中集"
       ],
       "props": {},
-      "dependencies": ["T014"],
+      "dependencies": [
+        "T014"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "Cmd+click 两张卡片后 selectedCardIds.size === 2",
         "框选时渲染半透明矩形选区",
         "selectedCardIds.size > 0 时顶栏批量操作条可见"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T045",
@@ -1120,7 +1246,9 @@
       "props": {
         "retrospectives": "Retrospective[]"
       },
-      "dependencies": ["T010"],
+      "dependencies": [
+        "T010"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "默认高度 28px，点击后 120px",
@@ -1129,7 +1257,7 @@
         "空数据时显示 No retros yet 提示",
         "Left/Right 键切换 selectedNode"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T046",
@@ -1149,7 +1277,10 @@
         "onStatusChange": "(path: string, status: string) => void",
         "onDelete": "(path: string) => void"
       },
-      "dependencies": ["T010", "T030"],
+      "dependencies": [
+        "T010",
+        "T030"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "P0 在 P1 之前渲染",
@@ -1157,7 +1288,7 @@
         "reporter 头像显示首字母，悬停 tooltip 显示全名",
         "Delete 需二次确认后调 delete_file IPC"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T047",
@@ -1172,14 +1303,17 @@
         "GenericBoard.version: 1 用于 schema 迁移"
       ],
       "props": {},
-      "dependencies": ["T004", "T006"],
+      "dependencies": [
+        "T004",
+        "T006"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "GenericCard.bootCommands: string[] 已定义",
         "GenericCard.size?: { w?: number; h?: number } 已定义",
         "Rust struct 与 TS 接口字段完全对应"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T048",
@@ -1195,14 +1329,17 @@
         "整张 GenericBoard 序列化为 JSON 写到 workspace 内的 .claude/.kanban-board.json"
       ],
       "props": {},
-      "dependencies": ["T027", "T047"],
+      "dependencies": [
+        "T027",
+        "T047"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "文件不存在时返回 4 列预置数据（不报错）",
         "损坏 JSON 时备份文件存在，返回预置数据",
         "set_layout / get_layout 与 app_state.json 中 layout 字段联动"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T049",
@@ -1212,15 +1349,20 @@
       "description": "封装 readGenericBoard / writeGenericBoard / getLayout / setLayout 四个 typed wrapper。",
       "prdRef": "docs/prds/claude-workflow-kanban.md#通用看板视图",
       "designRef": "",
-      "businessRules": [],
+      "businessRules": [
+        "不允许在组件或 store 内直接调 invoke()，所有通用看板命令调用必须通过本 wrapper 函数"
+      ],
       "props": {},
-      "dependencies": ["T003", "T047"],
+      "dependencies": [
+        "T003",
+        "T047"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "writeGenericBoard 接受 GenericBoard 类型参数",
         "TypeScript 编译无错误"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T050",
@@ -1236,7 +1378,10 @@
         "列 title 改成空字符串时拒绝保存, inline 提示「Title cannot be empty」"
       ],
       "props": {},
-      "dependencies": ["T047", "T049"],
+      "dependencies": [
+        "T047",
+        "T049"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "moveCard 只改 card.col，card.ptyId 不变",
@@ -1244,7 +1389,7 @@
         "写操作后 200ms debounce 调 writeGenericBoard（spy 验证）",
         "Vitest 测试 moveCard / addColumn / removeColumn（含有卡片时移到 backlog）"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T051",
@@ -1266,7 +1411,9 @@
         "onRename": "(title: string) => void",
         "onDelete": "() => void"
       },
-      "dependencies": ["T050"],
+      "dependencies": [
+        "T050"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "isPreset=true 时 color 不可编辑",
@@ -1274,7 +1421,7 @@
         "标题就地编辑空字符串时显示 inline 错误",
         "宽度响应 Tweaks.columnWidth 变化"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T052",
@@ -1295,15 +1442,22 @@
         "onMove": "(cardId: string, colId: string) => void",
         "onDelete": "(cardId: string) => void"
       },
-      "dependencies": ["T039", "T040", "T050"],
-      "reuseComponents": ["Terminal", "usePtySession"],
+      "dependencies": [
+        "T039",
+        "T040",
+        "T050"
+      ],
+      "reuseComponents": [
+        "Terminal",
+        "usePtySession"
+      ],
       "acceptanceCriteria": [
         "进入 running 列（col 变为 'running'）后 bootCommands 依次注入",
         "showDescriptions=false 时 desc 元素不渲染",
         "resize 双击后 size 重置为 undefined",
         "绿灯点击打开 FullscreenModal"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T053",
@@ -1319,15 +1473,22 @@
         "拖到自己所在列视为无操作, 不写盘, 不闪屏"
       ],
       "props": {},
-      "dependencies": ["T050", "T051", "T052"],
-      "reuseComponents": ["GenericColumn", "GenericCard"],
+      "dependencies": [
+        "T050",
+        "T051",
+        "T052"
+      ],
+      "reuseComponents": [
+        "GenericColumn",
+        "GenericCard"
+      ],
       "acceptanceCriteria": [
         "mount 时调用 readGenericBoard（mockIPC 验证）",
         "切到 Workflow 后再切回，卡片 PTY 仍活跃（ptyId 不变）",
         "拖到同列不触发 moveCard 和 write",
         "顶部 + Column 按钮打开输入框"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T054",
@@ -1337,16 +1498,23 @@
       "description": "注册全局键盘快捷键：⌘O → pickWorkspaceFolder、⌘W → close workspace（返回 empty）、⌘S → 当前聚焦编辑器保存。通过 Tauri menu API 或 document keydown 监听，shortcuts 常量集中定义。",
       "prdRef": "docs/prds/claude-workflow-kanban.md#工作区接入",
       "designRef": "",
-      "businessRules": [],
+      "businessRules": [
+        "⌘O 触发 pickWorkspaceFolder，⌘W 触发 close workspace 回到 empty 状态，⌘S 触发当前聚焦编辑器保存",
+        "快捷键映射集中定义为常量，禁止在 keydown handler 内硬编码 key 字符串",
+        "组件 unmount 时必须移除 keydown listener，防止内存泄漏"
+      ],
       "props": {},
-      "dependencies": ["T009", "T010"],
+      "dependencies": [
+        "T009",
+        "T010"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "⌘O 触发 pickWorkspaceFolder（mockIPC 验证）",
         "⌘W 触发 useWorkspaceStore.reset()",
         "cleanup 时移除 keydown listener"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T055",
@@ -1361,14 +1529,16 @@
         "前端连续 IPC 失败 > 3 次弹系统级 banner「Backend unresponsive, restart suggested」"
       ],
       "props": {},
-      "dependencies": ["T015"],
+      "dependencies": [
+        "T015"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "Toast error 显示 3s 后自动消失",
         "ErrorBoundary 捕获 throw 后渲染 fallback 而非白屏",
         "Watch offline 徽章在 watcherFailed=true 时显示"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "taskId": "T056",
@@ -1387,7 +1557,9 @@
         "onSelect": "(path: string) => void",
         "onRemove": "(path: string) => void"
       },
-      "dependencies": ["T010"],
+      "dependencies": [
+        "T010"
+      ],
       "reuseComponents": [],
       "acceptanceCriteria": [
         "最多渲染 5 条",
@@ -1395,7 +1567,7 @@
         "× 按钮触发 onRemove",
         "recents=[] 时不渲染列表"
       ],
-      "status": "pending"
+      "status": "done"
     }
   ]
 }

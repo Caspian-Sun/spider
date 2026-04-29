@@ -1,0 +1,251 @@
+/* WorkspaceShell layout */
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.topbar {
+  height: var(--topbar-height, 46px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.topbarPath {
+  font-size: 12px;
+  color: var(--text-2);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeBtn {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.closeBtn:hover {
+  border-color: var(--line-2);
+  color: var(--text);
+}
+
+.main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* EmptyPage */
+.emptyPage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.brandName {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  color: var(--text);
+}
+
+.brandSub {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.primaryBtn {
+  background: var(--green);
+  color: #07080a;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.primaryBtn:hover {
+  opacity: 0.9;
+}
+
+.recentList {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 360px;
+}
+
+.recentTitle {
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.recentItem {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--mono);
+  width: 100%;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentItem:hover {
+  border-color: var(--line-2);
+  color: var(--text);
+}
+
+/* ScanningPage */
+.scanningPage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 360px;
+}
+
+.scanningLabel {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.progressBar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width 0.1s ease;
+}
+
+.scanningFile {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-3);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* InvalidPage */
+.invalidPage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 360px;
+}
+
+.invalidTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.invalidDesc {
+  font-size: 13px;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.invalidList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+.invalidList li {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--amber);
+  padding: 4px 8px;
+  background: var(--bg-2);
+  border-radius: 3px;
+  margin-bottom: 4px;
+}
+
+.secondaryBtn {
+  background: none;
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.secondaryBtn:hover {
+  border-color: var(--green);
+  color: var(--text);
+}
+
+/* ErrorPage */
+.errorPage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.errorPage p {
+  font-size: 14px;
+  color: var(--red);
+  margin: 0;
+}
+
+/* KanbanShell placeholder */
+.kanbanPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--text-3);
+}

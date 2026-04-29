@@ -1,0 +1,35 @@
+.board {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 12px;
+  gap: 0;
+  background: var(--bg);
+}
+
+/* dark horizontal scrollbar */
+.board::-webkit-scrollbar {
+  height: 10px;
+}
+
+.board::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.board::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 5px;
+}
+
+.board::-webkit-scrollbar-thumb:hover {
+  background: var(--line-2);
+}
+
+.laneGroup {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-shrink: 0;
+}

@@ -1,0 +1,123 @@
+.card {
+  display: flex;
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg-2);
+  overflow: hidden;
+  min-width: 220px;
+  min-height: 160px;
+  flex-shrink: 0;
+}
+
+.card.selected {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green);
+}
+
+.kindBar {
+  width: 3px;
+  flex-shrink: 0;
+}
+
+.inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px 4px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.lights {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.light {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.light.red    { background: #ff5f57; }
+.light.yellow { background: #ffbd2e; }
+.light.green  { background: #28c840; }
+
+.kindTag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  background: var(--bg-3);
+  border-radius: 3px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+}
+
+.title {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+
+.statusBadge {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.menuBtn {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.menuBtn:hover { color: var(--text); }
+
+.terminalArea {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.idlePlaceholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.idlePlaceholder:hover { color: var(--text-2); }
+
+.resizeHandle {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  cursor: se-resize;
+  opacity: 0.5;
+  z-index: 10;
+}
+
+.resizeHandle:hover { opacity: 1; }

@@ -1,0 +1,102 @@
+.container {
+  position: fixed;
+  bottom: 14px;
+  right: 14px;
+  z-index: 500;
+}
+
+.fab {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--green);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 10px var(--green), 0 0 20px rgba(110, 231, 127, 0.3);
+}
+
+.fab:hover {
+  box-shadow: 0 0 14px var(--green), 0 0 28px rgba(110, 231, 127, 0.5);
+}
+
+.panel {
+  width: 260px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panelTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px;
+}
+
+.closeBtn:hover { color: var(--text); }
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.segControl {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.seg {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  padding: 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.seg + .seg {
+  border-left: 1px solid var(--line);
+}
+
+.seg:hover { background: var(--bg-3); }
+
+.segActive {
+  background: var(--bg-3);
+  color: var(--green);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

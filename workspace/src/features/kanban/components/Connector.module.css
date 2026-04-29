@@ -1,0 +1,23 @@
+.wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.svg {
+  display: block;
+}
+
+.label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-family: var(--mono);
+  color: var(--text-3);
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+  white-space: nowrap;
+  pointer-events: none;
+}

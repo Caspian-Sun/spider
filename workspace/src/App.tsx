@@ -1,29 +1,20 @@
 /**
- * @description 根组件, 单页桌面端没有路由, 用 phase 字段决定主界面状态
+ * @description 根组件，挂载全局 Provider 并渲染 WorkspaceShell
  * @module src
- * @dependencies (M1 阶段为空壳)
+ * @dependencies WorkspaceShell, react-i18next, @/stores/useWorkspaceStore
  * @prd docs/prds/claude-workflow-kanban.md#工作区接入
+ * @task docs/tasks/tasks-claude-workflow-kanban-2026-04-28.json#T012
  * @rules
- *   - M1 阶段先渲染欢迎页, M2 接入工作区扫描后切换到 KanbanShell
+ *   - 应用启动后, 若有最近工作区记录, 默认打开最近一个并自动进入 scanning 状态
  */
-import { useState } from "react";
 
-type Phase = "welcome" | "loading" | "kanban" | "error";
+import { Suspense } from 'react';
+import { WorkspaceShell } from '@/pages/WorkspaceShell';
 
 export default function App() {
-  const [phase] = useState<Phase>("welcome");
-
-  if (phase === "welcome") {
-    return (
-      <main style={{ padding: 32, fontFamily: "system-ui, sans-serif" }}>
-        <h1>spider</h1>
-        <p>M1 占位界面 — 等待工作区接入实现。</p>
-        <p style={{ color: "#888" }}>
-          选择一个 claude-code-workflow 仓库以开始。
-        </p>
-      </main>
-    );
-  }
-
-  return null;
+  return (
+    <Suspense fallback={null}>
+      <WorkspaceShell />
+    </Suspense>
+  );
 }

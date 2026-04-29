@@ -11,3 +11,4 @@ pub const PTY_OUTPUT: &str = "pty_output";
 pub const PTY_EXIT: &str = "pty_exit";
 pub const WORKSPACE_CHANGED: &str = "workspace_changed";
 pub const SCAN_PROGRESS: &str = "scan_progress";
+pub const BOARD_RESET_EVENT: &str = "board_reset";

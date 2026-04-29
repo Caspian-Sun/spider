@@ -1,0 +1,132 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(3px);
+  z-index: 400;
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 400px;
+  height: 100%;
+  background: var(--bg-1);
+  border-left: 1px solid var(--line-2);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+
+.count {
+  font-size: 11px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 6px;
+  color: var(--text-3);
+}
+
+.closeBtn {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--text-3);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.closeBtn:hover { border-color: var(--line-2); color: var(--text); }
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.group {
+  margin-bottom: 4px;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.groupHeader:hover { background: var(--bg-2); }
+
+.priorityBadge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.groupCount {
+  font-size: 11px;
+  color: var(--text-3);
+  flex: 1;
+}
+
+.chevron {
+  font-size: 9px;
+  color: var(--text-3);
+}
+
+.ruleItem {
+  padding: 8px 12px;
+  border-left: 2px solid var(--line);
+  margin: 2px 8px 2px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ruleId {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-3);
+}
+
+.ruleTitle {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.ruleDesc {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.empty {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+  padding: 24px;
+}
