@@ -116,6 +116,22 @@
 - `docs/retrospectives/` — `/meta-audit` 产出的只读观察报告
 - 详细说明见 `docs/README.md`
 
+### 命令工作流拓扑
+
+`.claude/workflow.json` 定义了所有命令的执行顺序与分组关系, 供 UI 渲染工作流图、供 AI 理解命令间依赖：
+
+- **`workflows.main`** — 主开发流程 (10 步): prd → prd-check → plan → plan-check → code → test → review → build → deploy → release
+- **`workflows.bugfix`** — Bug 修复支流: bug-check → fix → (汇入 main 的 test)
+- **`workflows.utility`** — 独立工具 (不在主链路): start / meta-audit
+
+字段说明:
+- `type: "gate"` — 校验门禁, 不通过不能进入下一步 (prd-check / plan-check / bug-check / review)
+- `type: "action"` — 执行动作
+- `next` — 后续命令 ID 数组 (空数组表示终点)
+- `merge-into` — 支流在此步后汇入哪个主流程
+
+> 调整命令执行顺序或新增分支时, **只修改 `.claude/workflow.json`**, 命令文件本身不需要改动。
+
 ### 任务清单使用方式
 
 - 编码前先读取对应的任务清单: `@docs/tasks/tasks-xxx.json`
