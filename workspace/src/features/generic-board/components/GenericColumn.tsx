@@ -31,7 +31,7 @@ export interface GenericColumnProps {
   children?: ReactNode;
 }
 
-export function GenericColumn({ column, cardCount, isPreset, onRename, onDelete, children }: GenericColumnProps) {
+export function GenericColumn({ column, cardCount, isPreset: _isPreset, onRename, onDelete, children }: GenericColumnProps) {
   const columnWidth = useLayoutStore(s => s.tweaks.columnWidth);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(column.title);
@@ -86,9 +86,8 @@ export function GenericColumn({ column, cardCount, isPreset, onRename, onDelete,
         ) : (
           <span
             className={styles.title}
-            onDoubleClick={() => { if (!isPreset) { setDraft(column.title); setEditing(true); } }}
-            title={isPreset ? 'Preset column — double-click to rename title only' : 'Double-click to rename'}
-            onDoubleClickCapture={() => { setDraft(column.title); setEditing(true); }}
+            onDoubleClick={() => { setDraft(column.title); setEditing(true); }}
+            title="Double-click to rename"
           >
             {column.title}
           </span>

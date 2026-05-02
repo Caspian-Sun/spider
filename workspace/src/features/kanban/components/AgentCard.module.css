@@ -2,17 +2,30 @@
   display: flex;
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: 7px;
   background: var(--bg-2);
   overflow: hidden;
   min-width: 220px;
   min-height: 160px;
   flex-shrink: 0;
+  cursor: default;
 }
 
 .card.selected {
-  border-color: var(--green);
-  box-shadow: 0 0 0 1px var(--green);
+  border-color: rgba(110, 231, 127, 0.5);
+  box-shadow: 0 0 0 1px rgba(110, 231, 127, 0.3), 0 6px 22px rgba(0, 0, 0, 0.45);
+}
+
+.card.collapsed .terminalArea {
+  display: none;
+}
+
+.card.pinned {
+  opacity: 0.9;
+}
+
+.card.dragging {
+  opacity: 0.45;
 }
 
 .kindBar {
@@ -30,38 +43,47 @@
 .header {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 8px 4px;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
   border-bottom: 1px solid var(--line);
+  background: var(--bg-3);
+  cursor: grab;
+  user-select: none;
+  min-height: 30px;
   flex-shrink: 0;
 }
 
 .lights {
   display: flex;
-  gap: 3px;
+  gap: 5px;
   flex-shrink: 0;
 }
 
 .light {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
 }
 
-.light.red    { background: #ff5f57; }
-.light.yellow { background: #ffbd2e; }
-.light.green  { background: #28c840; }
+.light.red    { background: #ff5f57; cursor: pointer; }
+.light.yellow { background: #ffbd2e; cursor: pointer; }
+.light.green  { background: #28c840; cursor: pointer; }
 
 .kindTag {
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
-  color: var(--text-3);
-  background: var(--bg-3);
   border-radius: 3px;
-  padding: 1px 4px;
+  padding: 1px 5px;
   flex-shrink: 0;
+  text-transform: uppercase;
+  font-family: var(--mono);
 }
+.kindTag.main  { background: rgba(110,231,127,0.12); color: var(--green);  border: 1px solid rgba(110,231,127,0.25); }
+.kindTag.sub   { background: rgba(195,155,255,0.12); color: var(--purple); border: 1px solid rgba(195,155,255,0.25); }
+.kindTag.skill { background: rgba(94,234,212,0.12);  color: var(--teal);   border: 1px solid rgba(94,234,212,0.25); }
+.kindTag.hook  { background: rgba(255,181,71,0.12);  color: var(--amber);  border: 1px solid rgba(255,181,71,0.25); }
 
 .title {
   flex: 1;
@@ -74,9 +96,28 @@
 }
 
 .statusBadge {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+  font-family: var(--mono);
+}
+.statusBadge.idle { background: rgba(107,114,128,0.15); color: var(--text-3); }
+.statusBadge.run  { background: rgba(255,181,71,0.18);  color: var(--amber);  animation: pulse 1.2s ease-in-out infinite; }
+.statusBadge.ok   { background: rgba(110,231,127,0.15); color: var(--green); }
+.statusBadge.err  { background: rgba(255,107,107,0.18); color: var(--red); }
+.statusBadge.wait { background: rgba(122,162,255,0.15); color: var(--blue); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.pinnedIcon {
+  font-size: 10px;
   flex-shrink: 0;
 }
 

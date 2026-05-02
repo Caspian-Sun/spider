@@ -46,6 +46,7 @@ export const CONNECTOR_WIDTH = 52;
 export const TOPBAR_HEIGHT = 46;
 export const PIPELINE_HEIGHT = 38;
 export const RETRO_HEIGHT = 28;
+export const SHELL_HEIGHT = 240;
 // Board 区域高度 = 100vh - TOPBAR_HEIGHT - RETRO_HEIGHT
 export const BOARD_HEIGHT_OFFSET = TOPBAR_HEIGHT + RETRO_HEIGHT; // 74px
 

@@ -1,13 +1,22 @@
 /**
- * @description 通用看板容器 — 列横排 + 跨列拖拽 + "+ Column" 按钮
+ * @description 通用看板容器 — 4 默认列 + 跨列拖拽 + 200ms debounce 持久化 + "+ Column" 按钮
  * @module features/generic-board/components
  * @dependencies useGenericBoardStore, useWorkspaceStore, GenericColumn, GenericCard
- * @prd docs/prds/claude-workflow-kanban.md#通用看板视图
- * @task docs/tasks/tasks-claude-workflow-kanban-2026-04-28.json#T053
+ * @prd docs/prds/claude-workflow-kanban.md#通用看板
+ * @task docs/tasks/tasks-claude-workflow-kanban-2026-05-02.json#T017
+ * @design docs/designs/claude-workflow-kanban/wf-app.jsx (GenericBoard 组件)
  * @rules
- *   - Layout 切换为 generic 时, Board 区域改用通用看板, PipelineStrip 隐藏
- *   - 切回 Workflow 视图时, generic 卡片对应的 PTY 不被销毁 (后台保活)
- *   - 拖到自己所在列视为无操作, 不写盘, 不闪屏
+ *   - 通过 TopBar Layout Toggle 切换到 generic 模式，PipelineStrip 隐藏，Board 切换为通用看板
+ *   - 通用看板数据持久化到工作区 .claude/.kanban-board.json
+ *   - 默认 4 列：Backlog / Ready / Running / Done
+ *   - 列可重命名（双击列标题内联编辑），按 Enter 或失焦提交，Esc 恢复原标题
+ *   - 列标题提交为空时，显示「Title cannot be empty」错误，不提交更改
+ *   - 列宽三档：narrow（240px）/ standard（320px）/ wide（440px），列头部下拉选择
+ *   - 删除含卡片的列时，弹确认框「Delete N cards or move them to backlog?」
+ *   - 卡片可跨列拖拽（HTML5 DnD），drag-over 时列显示绿色内阴影
+ *   - 卡片移入 running 列时，如有 bootCommands，自动依次执行
+ *   - 状态变更 200ms debounce 后持久化到 .kanban-board.json
+ *   - .kanban-board.json 不存在时，自动创建 4 列默认结构并写入文件
  */
 
 import { useEffect, useState } from 'react';
@@ -22,7 +31,7 @@ const PRESET_IDS = new Set(['backlog', 'ready', 'running', 'done']);
 export function GenericBoard() {
   const workspace = useWorkspaceStore(s => s.workspace);
   const { board, load, addCard, removeCard, moveCard, addColumn, removeColumn, renameColumn } = useGenericBoardStore();
-
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null);
   const [addingCol, setAddingCol] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
 
@@ -30,28 +39,31 @@ export function GenericBoard() {
     if (workspace?.rootPath) load(workspace.rootPath);
   }, [workspace?.rootPath, load]);
 
-  function handleDragOver(e: React.DragEvent<HTMLElement>, _colId: string) {
+  function handleDragOver(e: React.DragEvent, colId: string) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    (e.currentTarget as HTMLElement).classList.add('drop-active');
+    setDragOverColId(colId);
   }
 
-  function handleDragLeave(e: React.DragEvent<HTMLElement>) {
-    (e.currentTarget as HTMLElement).classList.remove('drop-active');
+  function handleDragLeave(e: React.DragEvent, colId: string) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverColId((prev) => (prev === colId ? null : prev));
+    }
   }
 
   function handleDrop(e: React.DragEvent, colId: string) {
     e.preventDefault();
-    (e.currentTarget as HTMLElement).classList.remove('drop-active');
+    setDragOverColId(null);
     const cardId = e.dataTransfer.getData('genericCardId');
     if (!cardId) return;
-    moveCard(cardId, colId); // no-op if same col (store checks)
+    moveCard(cardId, colId);
   }
 
   function handleAddColumn() {
-    if (!newColTitle.trim()) return;
-    const id = newColTitle.trim().toLowerCase().replace(/\s+/g, '-');
-    addColumn({ id, title: newColTitle.trim(), color: 'var(--line-2)' });
+    const title = newColTitle.trim();
+    if (!title) return;
+    const id = title.toLowerCase().replace(/\s+/g, '-');
+    addColumn({ id, title, color: 'var(--line-2)' });
     setNewColTitle('');
     setAddingCol(false);
   }
@@ -60,29 +72,30 @@ export function GenericBoard() {
 
   return (
     <div className={styles.board}>
-      {board.columns.map(col => {
-        const colCards = board.cards.filter(c => c.col === col.id);
+      {board.columns.map((col) => {
+        const colCards = board.cards.filter((c) => c.col === col.id);
+        const isDragOver = dragOverColId === col.id;
         return (
           <GenericColumn
             key={col.id}
             column={col}
             cardCount={colCards.length}
             isPreset={PRESET_IDS.has(col.id)}
-            onRename={title => renameColumn(col.id, title)}
+            onRename={(title) => renameColumn(col.id, title)}
             onDelete={() => removeColumn(col.id, true)}
           >
             <div
-              className={styles.dropZone}
-              onDragOver={e => handleDragOver(e, col.id)}
-              onDragLeave={handleDragLeave}
-              onDrop={e => handleDrop(e, col.id)}
+              className={`${styles.dropZone} ${isDragOver ? styles.dropActive : ''}`}
+              onDragOver={(e) => handleDragOver(e, col.id)}
+              onDragLeave={(e) => handleDragLeave(e, col.id)}
+              onDrop={(e) => handleDrop(e, col.id)}
             >
-              {colCards.map(card => (
+              {colCards.map((card) => (
                 <GenericCard
                   key={card.id}
                   card={card}
                   onMove={moveCard}
-                  onDelete={cardId => removeCard(cardId)}
+                  onDelete={(cardId) => removeCard(cardId)}
                 />
               ))}
             </div>
@@ -111,8 +124,11 @@ export function GenericBoard() {
               className={styles.addColInput}
               placeholder="Column title"
               value={newColTitle}
-              onChange={e => setNewColTitle(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddColumn(); if (e.key === 'Escape') setAddingCol(false); }}
+              onChange={(e) => setNewColTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddColumn();
+                if (e.key === 'Escape') setAddingCol(false);
+              }}
               autoFocus
             />
             <button className={styles.addColConfirm} onClick={handleAddColumn}>Add</button>

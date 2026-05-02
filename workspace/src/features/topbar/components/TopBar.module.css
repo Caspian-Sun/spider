@@ -1,11 +1,12 @@
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 40;
   height: 46px;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  /* Activity Bar 48px + 留白 16px */
+  padding: 0 12px 0 64px;
   background: var(--bg-1);
   border-bottom: 1px solid var(--line);
   gap: 8px;
@@ -92,4 +93,80 @@
 .iconBtn:hover {
   border-color: var(--line-2);
   color: var(--text);
+}
+
+.iconBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.badgeBtn {
+  position: relative;
+}
+
+.btnBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  background: var(--red);
+  color: #fff;
+  font-size: 9px;
+  font-family: var(--mono);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  pointer-events: none;
+}
+
+.runBtn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(110, 231, 127, 0.3);
+  background: rgba(110, 231, 127, 0.08);
+  color: var(--green);
+  font-size: 12px;
+  font-family: var(--mono);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.runBtn:hover {
+  background: rgba(110, 231, 127, 0.14);
+  border-color: rgba(110, 231, 127, 0.5);
+}
+
+.runBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.logo {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--green), var(--teal));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #000;
+  flex-shrink: 0;
+  font-family: var(--mono);
+}
+
+.brandName {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }

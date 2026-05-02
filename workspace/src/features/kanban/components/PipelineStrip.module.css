@@ -1,66 +1,81 @@
 .strip {
   position: sticky;
   top: 46px;
-  z-index: 90;
+  z-index: 35;
   height: 38px;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 12px 0 64px;
   background: var(--bg-1);
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
   overflow-y: hidden;
-  gap: 0;
+  gap: 2px;
   flex-shrink: 0;
 }
+
+/* hide scrollbar on strip */
+.strip::-webkit-scrollbar { display: none; }
 
 .stepGroup {
   display: flex;
   align-items: center;
+  gap: 2px;
 }
 
-.connector {
-  width: 24px;
-  height: 1px;
-  background: var(--line-2);
-  margin: 0 2px;
+.arrow {
+  font-size: 11px;
+  color: var(--line-2);
+  padding: 0 2px;
+  user-select: none;
+  pointer-events: none;
 }
 
-.connectorDone {
-  background: var(--teal);
-}
-
-.gate {
-  font-size: 12px;
+/* GATE marker */
+.gateTag {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
   color: var(--amber);
-  margin-right: 2px;
+  border: 1px dashed rgba(255, 181, 71, 0.45);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
 }
 
+/* Step button */
 .step {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 8px;
+  padding: 3px 7px;
   border-radius: 4px;
   border: 1px solid var(--line);
   background: var(--bg-2);
   cursor: pointer;
   white-space: nowrap;
+  transition: border-color 0.1s, background 0.1s;
 }
 
 .step:hover {
   border-color: var(--line-2);
 }
 
-.stepDone {
-  background: rgba(94, 234, 212, 0.1);
-  border-color: var(--teal);
-}
-
-.idx {
-  font-size: 10px;
-  color: var(--text-3);
+/* idx box */
+.idxBox {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
   font-family: var(--mono);
+  border-radius: 3px;
+  background: var(--bg-3);
+  color: var(--text-3);
+  flex-shrink: 0;
 }
 
 .name {
@@ -69,6 +84,62 @@
   font-family: var(--mono);
 }
 
+/* Active step */
+.stepActive {
+  border-color: rgba(110, 231, 127, 0.4);
+  background: rgba(110, 231, 127, 0.06);
+}
+
+.stepActive .idxBox {
+  background: var(--green);
+  color: #000;
+}
+
+.stepActive .name {
+  color: var(--green);
+}
+
+/* Done step */
+.stepDone .idxBox {
+  background: var(--teal);
+  color: #000;
+  font-weight: 700;
+}
+
 .stepDone .name {
   color: var(--teal);
+}
+
+/* Helpers area */
+.helpers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.helpersLabel {
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.helperBtn {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--mono);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  transition: color 0.1s;
+}
+
+.helperBtn:hover {
+  color: var(--text);
 }

@@ -14,6 +14,7 @@
   transition: height 0.15s ease;
   overflow: hidden;
   user-select: none;
+  gap: 8px;
 }
 
 .timeline.expanded {
@@ -21,6 +22,34 @@
   align-items: flex-start;
   padding-top: 8px;
   cursor: default;
+}
+
+/* ── collapsed layout ─────────────────────────────────────────── */
+.left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* workspace status indicator */
+.wsIndicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ws_ready    { background: var(--green); }
+.ws_empty    { background: transparent; border: 1.5px solid var(--text-3); }
+.ws_invalid  { background: var(--red); }
+.ws_error    { background: var(--red); }
+.ws_scanning { background: var(--amber); animation: blink 0.9s ease-in-out infinite; }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
 }
 
 .summary {
@@ -32,6 +61,59 @@
   text-overflow: ellipsis;
 }
 
+/* ── shell tabs ───────────────────────────────────────────────── */
+.shellTabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.shellTab {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  cursor: pointer;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-3);
+  transition: border-color 0.1s, color 0.1s;
+}
+
+.shellTab:hover {
+  border-color: var(--line-2);
+  color: var(--text);
+}
+
+.shellTabActive {
+  border-color: rgba(110, 231, 127, 0.3);
+  color: var(--green);
+}
+
+.shellTabTitle {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shellTabClose {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.shellTabClose:hover {
+  color: var(--red);
+}
+
+/* ── expanded layout ──────────────────────────────────────────── */
 .nodes {
   display: flex;
   align-items: flex-start;
@@ -40,6 +122,8 @@
   padding-bottom: 4px;
   width: 100%;
 }
+
+.nodes::-webkit-scrollbar { display: none; }
 
 .empty {
   font-size: 11px;

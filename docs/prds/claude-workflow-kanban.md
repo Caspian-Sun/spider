@@ -1,83 +1,66 @@
-# Claude Code Workflow Kanban PRD
+# Claude Code Workflow 看板应用 PRD
 
-> 写 PRD 的核心原则: **小标题即锚点**, 后续 `@prd docs/prds/claude-workflow-kanban.md#<锚点>` 全靠这些标题定位。小标题命名要稳定、明确, 不要随意改动。
+> 写 PRD 的核心原则: **小标题即锚点**, 后续 `@prd docs/prds/claude-workflow-kanban.md#<锚点>` 全靠这些标题定位。
 
 ## 元信息
 
-| 项       | 值                                                                            |
-| -------- | ----------------------------------------------------------------------------- |
-| 模块代号 | `claude-workflow-kanban`                                                      |
-| 负责人   | Tommy (suntao0518@gmail.com)                                                  |
-| 创建日期 | 2026-04-24                                                                    |
-| 最后更新 | 2026-04-28                                                                    |
-| 状态     | draft                                                                         |
-| 关联产物 | 旧稿 `PRD.md` (Claude Design 输出, 本 PRD 为官方重组版本, 见下方设计稿章节); v1.1 同步 spider (2) 原型: 新增 Terminal Kanban 通用看板视图与 Layout Toggle |
+| 项 | 值 |
+|----|----|
+| 模块代号 | `claude-workflow-kanban` |
+| 负责人 | [待填写] |
+| 创建日期 | 2026-05-02 |
+| 最后更新 | 2026-05-02 |
+| 状态 | draft |
 
 ## 背景与目标
 
-`claude-code-workflow` 仓库把 AI 协作的知识沉淀成了两类文件: `.claude/` (命令 / 子代理 / 规则 / hooks) 和 `docs/` (PRD / tasks / bug-reports / retrospectives). 目前研发、产品、设计要查看或改动这些文件, 必须在 VSCode + 终端之间反复横跳, 很难一眼看清整个工作流状态, 也很难在看板里直接改 status 或启动 AI 命令。
-
-本工具是一个**桌面端 GUI**, 把这两个目录的内容可视化成**看板 (Kanban)**: 每条泳道 = 一个工作流命令, 泳道里每张卡片 = 一个**真实的终端会话 (PTY)**, 用来运行 Claude Code 命令。所有看板内容**动态来自文件系统**, 不写死任何 seed 数据。UI 上对文件的改动立即回写磁盘, 外部编辑器改动经 watcher 实时刷新 UI, 做到「桌面端」和「VSCode」双向无感同步。
-
-目标用户: 使用 `claude-code-workflow` 方法论开发前端项目的**研发 / 产品 / 设计** (三方共用一份看板对齐状态)。
-
-> ⚠️ 本模块的技术栈**与 `claude-code-workflow` 主仓库的 UmiJS 栈无关**, 本工具是独立的 Tauri 桌面端应用, 见下文「附录 B · 技术栈与目录结构」。
+Claude Code Workflow 是一款 Tauri 2.x 桌面应用，将 `.claude/commands/` 定义的 AI Agent 工作流可视化为 DAG 看板。用户选择一个工程目录（workspace）后，应用自动扫描并呈现 8 个流水线步骤（prd → plan → code → test → review → build → deploy → release）和 2 个辅助步骤（fix、meta-audit），每个步骤对应一条泳道，泳道内的 Agent 卡片承载真实的 PTY 终端会话。目标是让开发者在一个界面内管理整个 AI 辅助开发流程，不再在多个终端窗口之间切换。
 
 ## 名词解释
 
-| 术语             | 含义                                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------ |
-| workspace        | 被打开的目标仓库根目录, 必须有 `.claude/` 子目录才算合法                             |
-| workflow         | `.claude/commands/` 下一组命令按 `idx` 升序排成的流水线                              |
-| lane (泳道)      | 看板上一列, 对应 `.claude/commands/` 下一个命令文件                                  |
-| helper lane      | frontmatter `helper: true` 的命令, 不进主 pipeline, 放辅助区 (虚线边框)              |
-| AgentCard (卡片) | 泳道内一张终端卡片, 绑定一个 PTY 进程, 用于运行 Claude Code 命令                     |
-| gate             | 命令 frontmatter 的 `gate` 字段, 指向它的下游审查命令                                |
-| artifact         | 一条命令的输入 / 输出文件 (`inputs` / `outputs` frontmatter 字段)                    |
-| PTY              | pseudo-terminal, 通过 `portable-pty` 创建的跨平台伪终端                              |
-| frontmatter      | `.md` 文件头部的 YAML 或 `.json` 文件的元数据字段                                    |
-| TBD              | PRD 正文里的占位符 `[TBD]`, 工具会统计其数量提醒待补充                                |
-| scan             | Rust 端一次性扫描整个 workspace 文件系统, 产出完整 `Workspace` 数据                  |
-| watcher          | 文件变化监听器, 基于 Rust `notify` crate, 通过 Tauri event 把增量 diff 推给前端     |
+| 术语 | 含义 |
+|------|------|
+| Workspace | 用户选择的本地工程目录，必须含 `.claude/` 子目录 |
+| Lane（泳道） | 对应一个 `/command` 的看板列，宽 360px |
+| Agent Card（卡片） | 泳道内的任务单元，持有一个 PTY 会话 |
+| Kind | 卡片类型：main（主流程）/ sub（子代理）/ skill（技能插件）/ hook（钩子） |
+| Gate | 两个泳道间的质量门禁，如 prd-check / plan-check |
+| Shell Panel | 全局底部终端抽屉，独立于卡片终端 |
+| Retro Timeline | 底部 28px 状态栏，展示 /meta-audit 历史 |
+| drift | /meta-audit 发现的 PRD 与代码不一致条数 |
+| activeView | Activity Bar 当前激活的视图：board / prd / tasks / bugs / docs / settings |
 
 ## 设计稿
 
-> 设计稿是视觉规范的唯一来源, 与 PRD 的业务规则互补: PRD 管「做什么」, 设计稿管「长什么样」。
-
-| 项         | 值                                                                              |
-| ---------- | ------------------------------------------------------------------------------- |
-| 来源类型   | file (本地 HTML + JSX 原型, 已归档到 `docs/designs/claude-workflow-kanban/`)   |
-| Figma 链接 | (无)                                                                            |
-| 本地文件   | `docs/designs/claude-workflow-kanban/Workflow Kanban.html` (**主设计文件 — 流水线泳道视图**, CSS 变量源) |
-|            | `docs/designs/claude-workflow-kanban/Terminal Kanban.html` (**通用看板视图** — Backlog/Ready/Running/Done 自由拖拽) |
-|            | `docs/designs/claude-workflow-kanban/wf-app.jsx` (Workflow 视图: Board / Lane / AgentCard / 各抽屉的 React 结构) |
-|            | `docs/designs/claude-workflow-kanban/wf-terminal.jsx` (Workflow 视图终端卡片与 slash 命令脚本) |
-|            | `docs/designs/claude-workflow-kanban/app.jsx` (Generic 视图: 列 / 卡片 / 拖拽 / Tweaks 面板) |
-|            | `docs/designs/claude-workflow-kanban/terminal.jsx` (Generic 视图卡片内终端) |
-|            | `docs/designs/claude-workflow-kanban/shell.jsx` (Fake shell 原型, 仅供交互参考) |
-|            | `docs/designs/claude-workflow-kanban/card.jsx` (卡片拖拽 / resize / 右键菜单行为) |
-| MCP 配置   | 未接入 (Figma 无资源, 不需要 figma-mcp)                                          |
+| 项 | 值 |
+|----|----|
+| 来源类型 | file |
+| 本地文件 | `docs/designs/claude-workflow-kanban/Workflow Kanban.html` |
+| JSX 原型 | `docs/designs/claude-workflow-kanban/wf-app.jsx` |
 
 ### 功能点与设计帧映射
 
-| 功能点 (PRD 锚点)   | 设计引用                                                             |
-| ------------------- | -------------------------------------------------------------------- |
-| #工作区接入         | `wf-app.jsx` → `WorkspaceShell` + 4 种 state 组件                    |
-| #文件扫描           | `wf-app.jsx` 中 `SEED_*` 常量 (将被真实扫描结果替换)                 |
-| #顶栏               | `Workflow Kanban.html` `.topbar` + `wf-app.jsx` `TopBar` / `PRDSelector` (含 Layout Toggle) |
-| #流水线条           | `Workflow Kanban.html` `.pipeline`                                   |
-| #看板与泳道         | `Workflow Kanban.html` `.board` + `.lane` + `.connector`             |
-| #终端卡片           | `wf-terminal.jsx` + `wf-app.jsx` `AgentCard` + `card.jsx` 拖拽行为   |
-| #规则抽屉           | `wf-app.jsx` `RulesDrawer`                                           |
-| #文档浏览器         | `wf-app.jsx` `DocsViewer`                                            |
-| #PRD-预览与编辑     | `wf-app.jsx` `PRDSelector` 下拉 + `PRDPreview` 模态                  |
-| #任务与-Bug         | `wf-app.jsx` `TaskRow` + `/fix` 泳道里的 `BugList`                   |
-| #回溯时间轴         | `wf-app.jsx` `RetroTimeline`                                         |
-| #文件系统集成       | (无视觉帧, 后端能力为主)                                             |
-| #工具面板           | `Workflow Kanban.html` `.tweaks` + `app.jsx` Tweaks 编辑模式         |
-| #通用看板视图       | `Terminal Kanban.html` 整页 + `app.jsx` Board / Card / Tweaks + `terminal.jsx` |
-
-> **归档**: 设计稿已按规范放入 `docs/designs/claude-workflow-kanban/`, 路径为本仓库根目录的相对路径。原始来源是 Claude Design 工具一次性导出的 HTML + JSX 原型, 不再增量维护。
+| 功能点（PRD 锚点） | 设计稿引用 |
+|-------------------|-----------|
+| #工作区接入 | `wf-app.jsx` 工作区状态机 |
+| #Activity-Bar | `.activity-bar` CSS + `wf-app.jsx` ActivityBar 组件 |
+| #顶部操作栏 | `.topbar` CSS + `wf-app.jsx` TopBar 组件 |
+| #流水线步骤条 | `.pipeline` CSS + `wf-app.jsx` PipelineStrip 组件 |
+| #看板主区域 | `.board` CSS + `.board-inner` |
+| #泳道 | `.lane` `.lane-head` `.lane-body` `.lane-foot` CSS |
+| #泳道连接箭头 | `.connector` CSS |
+| #Agent-卡片 | `.agent` `.agent-head` CSS |
+| #卡片内嵌终端 | `.term` `.term-output` `.term-input-row` CSS |
+| #底部时间轴 | `wf-app.jsx` RetroTimeline 组件 |
+| #全局-Shell-面板 | `.shell-panel` CSS |
+| #通知抽屉 | `.notif-drawer` CSS |
+| #命令面板 | `.cmdk-veil` `.cmdk` CSS |
+| #卡片详情焦点视图 | `.focus-veil` `.focus-box` CSS |
+| #规则抽屉 | `wf-app.jsx` RulesDrawer 组件 |
+| #PRD-选择器 | `wf-app.jsx` PRDSelector 组件 |
+| #文档浏览器 | `wf-app.jsx` DocsPanel 组件 |
+| #右键菜单 | `.ctx` CSS |
+| #微调面板 | `.tweaks` CSS |
 
 ---
 
@@ -85,1251 +68,515 @@
 
 ### 用户故事
 
-作为开发者, 我希望首次启动能选择本地仓库, 并自动打开最近一次使用的 workspace, 以便工具对接到我的 `claude-code-workflow` 项目。
-
-### 字段定义
-
-| 字段              | 类型              | 必填 | 校验规则                         | 默认值 |
-| ----------------- | ----------------- | ---- | -------------------------------- | ------ |
-| rootPath          | string (绝对路径) | 是   | 目录存在 + 可读                  | -      |
-| recentWorkspaces  | string[]          | 否   | 最多 5 条, 去重, 按最近打开排序 | []     |
-| workspaceState    | enum              | 是   | `empty` / `scanning` / `invalid` / `ready` | `empty` |
+作为开发者，我希望应用启动后能快速选择或恢复上次的工程目录，以便立即开始工作而不需要每次重新配置。
 
 ### 业务规则
 
-1. 应用启动后, 若 `get_recent_workspaces` 返回空数组, 进入 `empty` 状态并显示欢迎页
-2. 应用启动后, 若有最近工作区记录, 默认打开最近一个并自动进入 `scanning` 状态
-3. `empty` 状态下点击 "Open folder" 按钮, 调用 `pick_workspace_folder` 弹出系统文件夹选择对话框
-4. 选中文件夹后先调用 `validate_workspace`, 若返回 `valid: false` 则进入 `invalid` 状态并列出缺失项 (至少要缺 `.claude`)
-5. 校验通过后进入 `scanning` 状态, 实时消费 `scan_progress` 事件并展示当前文件名 + 百分比进度条
-6. `scan` 完成后自动进入 `ready` 状态, 并把 `rootPath` 写入 `recentWorkspaces` 头部
-7. `ready` 状态下顶栏右侧的 "Close workspace" 按钮返回 `empty` 状态, 保留 `recentWorkspaces`
-8. `invalid` 状态下点击 "Pick another" 回到 `empty` 状态, 当前路径不写入 `recentWorkspaces`
-9. 用户在系统对话框里取消选择时, 保持当前状态不变, 不报错
+1. 应用启动时读取持久化的最近工作区记录（最多 5 条），若记录不为空则自动打开最近一个并进入 `scanning` 状态
+2. 应用启动时读取记录为空，进入 `empty` 状态，显示欢迎页
+3. `empty` 状态显示：应用名称 + 「选择工作区」主按钮 + 最近工作区列表（最多 5 条，带路径和移除按钮）
+4. 选择目录后进入 `scanning` 状态，Rust 端扫描目录结构，扫描过程中显示进度提示
+5. 扫描完成且 `.claude/` 目录存在，进入 `ready` 状态，渲染完整看板
+6. 扫描完成但目录不含 `.claude/`，进入 `invalid` 状态，提示「该目录不是有效的 Claude 工程」
+7. `ready` 状态下点击「Close workspace」返回 `empty` 状态，保留 `recentWorkspaces` 记录
+8. 最近工作区记录中路径已失效（目录不存在），点击时显示错误提示并从列表移除
+9. 扫描范围：`.claude/commands/*.md`（泳道来源）、`docs/prds/*.md`、`docs/tasks/*.json`、`docs/bug-reports/*.md`、`docs/retrospectives/*.md`
+10. 解析失败的单个文件不阻断整个扫描，错误记入 `scanErrors` 数组，TopBar 显示小徽章「N 个文件解析失败」
 
-### 数据契约 (Tauri command)
-
-> 本模块是桌面端 Tauri 应用, 前后端交互走 `tauri::command` 而非 HTTP, 故不走 OpenAPI。完整命令签名见「附录 C · Tauri command 签名」。
-
-#### 调用的命令
-
-| 业务操作       | command                   | 参数           | 返回                                              |
-| -------------- | ------------------------- | -------------- | ------------------------------------------------- |
-| 选文件夹       | `pick_workspace_folder`   | -              | `string` (取消时 reject)                          |
-| 校验           | `validate_workspace`      | `path: string` | `{ valid: boolean, detected: string[] }`          |
-| 扫描           | `scan_workspace`          | `path: string` | `Workspace` (见附录 A)                            |
-| 最近历史       | `get_recent_workspaces`   | -              | `string[]`                                        |
-
-#### 事件
-
-| 事件            | 方向         | payload                                    |
-| --------------- | ------------ | ------------------------------------------ |
-| `scan_progress` | Rust → JS    | `{ currentFile: string, progress: number }` (progress 0-1) |
-
-### 交互流程
+### 状态机
 
 ```
-启动 → get_recent_workspaces
-  ├─ 空 → empty
-  └─ 有值 → 自动选第一个 → scanning (skip validate, 因为上次已通过)
-empty → [Open folder] → pick_workspace_folder → validate_workspace
-  ├─ valid → scanning → (scan_progress 事件流) → ready
-  └─ invalid → invalid (显示缺失项) → [Pick another] → empty
+empty ──[选择目录]──▶ scanning ──[扫描完成，有 .claude/]──▶ ready
+  ▲                                    │                        │
+  │                          [.claude/ 缺失]                    │
+  │                                    ▼                        │
+  │                                 invalid              [Close workspace]
+  └────────────────────────────────────────────────────────────┘
 ```
 
-### 异常场景
+### Tauri IPC
 
-| 场景                          | 预期行为                                                    |
-| ----------------------------- | ----------------------------------------------------------- |
-| 用户取消文件夹对话框          | 保持当前状态, 不报错                                        |
-| 选中路径不存在 / 不可读       | `empty` 状态 toast「路径不可用」, 不切换状态                |
-| scan 过程中路径被外部删除     | 终止 scan, 切到 `invalid`, 提示「Workspace disappeared」    |
-| scan 耗时 > 5s                | UI 显示「Still scanning, large workspace...」提示, 不中断  |
-| 最近工作区记录已失效 (路径消失) | 自动从 `recentWorkspaces` 中剔除该条, 进入 `empty` 状态     |
+| 操作 | Command | 说明 |
+|------|---------|------|
+| 打开目录选择对话框 | `pick_workspace_folder` | 返回用户选择的路径或 null |
+| 扫描工作区 | `scan_workspace` | 返回 WorkspaceScanResult |
+| 读取最近记录 | `get_recent_workspaces` | 返回 string[] |
+| 保存最近记录 | `save_recent_workspaces` | 接受 string[] |
 
 ---
 
-## 功能点 2: 文件扫描
+## 功能点 2: Activity Bar
 
 ### 用户故事
 
-作为开发者, 我希望工具能把 `.claude/` + `docs/` 下所有约定文件自动解析成结构化数据, 用作看板的唯一真相源。
-
-### 字段定义
-
-完整数据模型见「附录 A · Workspace 数据模型」。扫描产物是一个 `Workspace` 对象, 包含: `commands` / `agents` / `rules` / `hooks` / `prds` / `tasks` / `bugReports` / `retrospectives` / `staticDocs` 九大数组。
+作为用户，我希望通过左侧固定的导航栏快速切换不同视图，以便在看板、PRD、任务、Bug、文档之间自由跳转。
 
 ### 业务规则
 
-1. 遍历 `.claude/commands/*.md`, 每个文件对应一条 `Command`, 解析 YAML frontmatter
-2. `Command` 无 frontmatter 时降级: `id` = 文件名, `title` = 文件首个 `#` 标题, `idx` = null, `helper` = true (放辅助区)
-3. `Command` 按 `idx` 升序排主 pipeline; `idx` 为 null 或 `helper: true` 的进入 helper 区
-4. 遍历 `.claude/agents/*.md`, frontmatter 里 `bindTo: [cmd_id]` 决定 `SubAgent` 归属哪条泳道, 支持多个绑定
-5. `SubAgent` 没有 `bindTo` 时进入浮动区, MVP 隐藏该区域 (不渲染)
-6. 遍历 `.claude/rules/*.md`, frontmatter 必须同时有 `priority` 和 `lanes` 两个字段, 否则该规则无效并记入 `scan_errors`
-7. 遍历 `.claude/hooks/*.md`, frontmatter 需要 `trigger` (`pre` / `post` / `on-change`) 和 `boundCommands`
-8. 遍历 `docs/prds/*.md`, `id` = 文件名, `tbdCount` = 正文中 `[TBD]` 字符串的出现次数
-9. PRD 的 `anchors` (tasks / code / tests 引用数) MVP 返回全 0, v2 再接入全仓库 grep
-10. 遍历 `docs/tasks/*.json`, 每个文件 = 一个 `TaskManifest`, 任务按自身 `lane` 字段归到对应泳道
-11. 遍历 `docs/bug-reports/*.md` 和 `docs/retrospectives/*.md`, 按各自 frontmatter schema 解析
-12. 扫描 `WORKFLOW.md` / `DECISIONS.md` / `docs/**/README.md` 生成 `StaticDoc`
-13. 扫描结果不做持久化 (文件少, 每次启动重新扫)
-14. 解析失败的单个文件不阻断整个扫描, 错误记入 `scan_errors` 数组, 前端可在顶栏小徽章里看到「N 个文件解析失败」
-15. 扫描目录时必须排除 `node_modules` / `.git` / `dist` / `target` / `.DS_Store`
-
-### 数据契约
-
-| 操作       | command            | 参数           | 返回        |
-| ---------- | ------------------ | -------------- | ----------- |
-| 扫描全量   | `scan_workspace`   | `path: string` | `Workspace` |
-
-frontmatter schema 见「附录 D · frontmatter 最小 schema」。
-
-### 异常场景
-
-| 场景                        | 预期行为                                           |
-| --------------------------- | -------------------------------------------------- |
-| YAML 语法错                 | 该文件降级处理 + 记入 `scan_errors`, 其他文件继续   |
-| 文件编码非 UTF-8            | 该文件跳过 + 记入 `scan_errors`                    |
-| 权限不足读某文件            | 记入 `scan_errors`, 继续其他文件                   |
-| `.claude/` 下混入子目录     | 递归扫描, 但只认 `.md` 后缀                         |
-| `Command.idx` 有重复值      | 后扫到的保持原序, 前端不报错, `scan_errors` 里记录 |
+1. Activity Bar 固定在屏幕最左侧，宽 48px，高度占满全屏，不随内容滚动，z-index: 95
+2. 顶部显示 λ logo（绿色，18px mono 字体，32×32px 区域），logo 下方依次排列 6 个导航按钮：看板（board）/ 需求（prd）/ 任务（tasks）/ 缺陷（bugs）/ 文档（docs）/ 设置（settings）
+3. 激活按钮左侧显示 2px 绿色指示条（`::before` 伪元素，left: -10px），文字变为 `var(--text)`
+4. 未激活按钮颜色为 `var(--text-3)`，hover 时变为 `var(--text)` 并显示 `var(--bg-2)` 背景，圆角 4px
+5. 缺陷（bugs）图标显示当前未修复 bug 数量的红色数字徽章（右上角 14×14px 圆形）
+6. 设置（settings）按钮固定在 Activity Bar 底部（`.ab-spacer` 弹性间隔），其余按钮在顶部
+7. 工作区未加载（empty / invalid 状态）时，除 settings 外其他按钮禁用，徽章不显示
+8. 切换 activeView 时，主内容区域整体替换，TopBar / PipelineStrip / RetroTimeline 保持挂载不重渲
 
 ---
 
-## 功能点 3: 顶栏
+## 功能点 3: 顶部操作栏
 
 ### 用户故事
 
-作为使用者, 我希望顶栏始终显示当前 workspace 状态, 快速切换 PRD, 并能一键打开规则 / 文档面板。
-
-### 字段定义
-
-顶栏全部只读展示, 无独立表单。各 chip 的数据来自 `workspaceStore` selector:
-
-| 展示项        | 来源                                                                |
-| ------------- | ------------------------------------------------------------------- |
-| brand         | 静态常量                                                            |
-| path chip     | `Workspace.rootPath` 最后 2 段 + `…` 前缀                           |
-| PRDSelector   | `Workspace.prds` 数组 + 当前 `activePrdId`                          |
-| stats chip    | 实时计算: `cards.filter(c => c.status === 'run').length`            |
-| Rules 按钮    | `Workspace.rules.length` + violations 数                            |
-| Docs 按钮     | 静态                                                                |
-| Layout Toggle | `useLayoutStore.layout` (`workflow` / `generic`)                    |
+作为用户，我希望顶栏始终显示当前工作区状态并提供快捷操作，以便一眼掌握进度并快速触发常用功能。
 
 ### 业务规则
 
-1. 顶栏固定高度 46px, 吸顶, 不随看板横向滚动
-2. 路径 chip 显示 `rootPath` 的最后两段 + 省略号前缀, 悬停 tooltip 显示完整路径
-3. 点击路径 chip 复制完整 `rootPath` 到剪贴板, 并 toast「Path copied」
-4. PRDSelector 展示当前激活 PRD 的 `id` + `status` badge + `tbdCount` (若 > 0 显示 amber 小气泡)
-5. PRDSelector 下拉列出所有 PRD, 每条可直接点 `status` badge 切换状态 (draft / active / archived)
-6. 下拉末尾有 `+ new PRD`, 点击调 `create_file(docs/prds/PRD-{nextId}.md, template='prd')`, 新文件立即成为激活 PRD
-7. stats chip 显示「● N running」, N 为实时 `run` 状态的 PTY 数; N = 0 时显示灰色点
-8. Rules 按钮文案格式「Rules(N)」, 若存在 violation, 文案后追加红色小数字徽章
-9. 点 Rules 按钮打开 RulesDrawer; 点 Docs 按钮打开 DocsViewer
-10. Reset 按钮点击弹二次确认「这会重新扫描 workspace, 丢失未保存的 UI 状态」, 确认后清 localStorage 并重新扫描, 不删任何用户文件
-11. Run 按钮 MVP 灰化禁用, v2 实现「一键跑全流水线」
-12. Layout Toggle 是位于 stats chip 与 Rules 按钮之间的图标按钮组 (icon: `columns` / `grid`), 默认高亮 `workflow` (流水线泳道); 点击切换为 `generic` (通用看板, 见 #通用看板视图)
-13. Layout Toggle 切换时, 主体 Board 区域整体替换 (流水线 ↔ 通用看板), 顶栏 / RetroTimeline / 抽屉保持挂载不重渲
-14. Layout Toggle 选择持久化到 Rust 端 `app_state.json` (键 `layout`), 下次启动恢复; 不写入 localStorage
-
-### 数据契约
-
-| 操作                 | command              |
-| -------------------- | -------------------- |
-| 新建 PRD             | `create_file`        |
-| 切 PRD status        | `update_frontmatter` |
-| Reset workflow       | `scan_workspace` (重新调一次)  |
-
-### 异常场景
-
-| 场景                    | 预期行为                                |
-| ----------------------- | --------------------------------------- |
-| 切 PRD 时该文件被外部删除 | toast 错误 + 自动选列表第一项          |
-| 无任何 PRD              | PRDSelector 显示「No PRD yet」, 下拉只有 `+ new` |
-| 剪贴板 API 不可用       | toast「Clipboard unavailable」, 不中断   |
+1. TopBar 固定高度 46px，吸顶，z-index: 40，不随看板横向滚动
+2. padding-left 64px（Activity Bar 48px + 留白 16px），为侧边栏留出空间
+3. 左区：λ logo（20×20px，绿→青 135° 渐变，border-radius 4px，内显示「λ」黑色加粗）+ 品牌文字「CLAUDE CODE WORKFLOW」（mono 加粗 12.5px）+ 路径 chip + PRD 选择器
+4. 路径 chip 显示 rootPath 最后两段，格式「…/parent/dir」，悬停 tooltip 显示完整路径，font-family mono
+5. 中区统计 chip 列表（mono 11px）：cmds 数 / tasks 数 / 文件数 / 测试数 / running 数
+6. 右区从左到右：Rules 按钮（含违规数红色徽章）→ Docs 按钮 → 🔔 铃铛（含未读数红色徽章）→ ⌘K 按钮 → >\_Shell 按钮 → Reset 按钮 → **Run pipeline** 绿色主按钮
+7. Run pipeline：`background: rgba(110,231,127,0.08); border-color: rgba(110,231,127,0.3); color: var(--green)`，触发完整流水线执行前弹确认框
+8. Rules 按钮违规数为 0 时不显示徽章；🔔 未读数为 0 时不显示徽章
+9. Reset 点击：关闭工作区，返回 `empty` 状态，保留最近记录
+10. 工作区未加载时：路径 chip 隐藏，中区 + 右区操作按钮全部禁用
 
 ---
 
-## 功能点 4: 流水线条
+## 功能点 4: 流水线步骤条
 
 ### 用户故事
 
-作为开发者, 我希望一眼看懂整个工作流命令顺序, 以及当前处于哪一步。
+作为用户，我希望在顶栏下方看到当前工作流的全局进度，以便快速定位当前所在步骤并跳转。
 
 ### 业务规则
 
-1. PipelineStrip 固定高度 38px, 位于顶栏下方, 跨屏吸顶
-2. 每个主命令 (`helper: false` 且有 `idx`) 渲染为一个 step, 按 `idx` 升序
-3. gate 命令 (上游 `Command.gate` 字段指向它) 以小菱形 step 形式嵌在其上游 step 之后
-4. helper 命令 (`helper: true`) 放在流水线末端 `helpers:` 区, 与主流水线用 `|` 分隔
-5. 点击 step 高亮对应泳道, 并让 Board 自动横向滚动到该泳道居中位置
-6. 当前选中泳道对应 step 使用 `.active` 样式 (绿色边框 + 浅绿底)
-7. 若一个泳道下所有归属 Task 的 `status` 都是 `done`, 则其 step 使用 `.done` 样式 (teal 小方块填满)
-8. PipelineStrip 独立横向滚动 (滚动条隐藏), 滚动不影响 Board
-9. step 右键菜单提供「Edit command source」选项, 点击弹内嵌 md 编辑器改对应 `.claude/commands/*.md`
-
-### 数据契约
-
-由 `Workspace.commands` + `Workspace.tasks` 派生, 无独立接口。
-
-### 异常场景
-
-| 场景                  | 预期行为                              |
-| --------------------- | ------------------------------------- |
-| 只有 helper 没有主命令 | pipeline 区显示「No main commands」   |
-| step 对应文件外部删除 | step 消失; 若当前选中的是它, 自动选第一个 |
+1. Pipeline Strip 固定高度 38px，位于 TopBar 正下方，padding-left 64px 与 TopBar 对齐
+2. 步骤顺序固定：1 /prd → 2 /plan → 3 /code → 4 /test → 5 /review → 6 /build → 7 /deploy → 8 /release
+3. 每个步骤显示：数字编号方块（16×16px，border-radius 3px）+ 命令名，整体 border-radius 4px 的圆角按钮
+4. 激活步骤：绿色边框（rgba(110,231,127,0.4)）+ 绿色背景（rgba(110,231,127,0.06)）+ 数字方块绿底黑字
+5. 已完成步骤：数字方块青色底（`var(--teal)`）黑字加粗
+6. 步骤间箭头（→）用 `var(--line-2)` 颜色显示，不可点击
+7. prd→plan 之间、plan→code 之间各有一个 GATE 标记（琥珀色虚线边框，显示门禁命令名如「◆ PRD-CHECK」）
+8. 步骤条右侧显示「helpers:」标签 + /fix 链接 + /meta-audit 链接（无编号方块，样式更轻）
+9. 点击步骤将对应泳道滚动到视口内并设为 activeStep
+10. Layout 切换为 generic（通用看板）时，Pipeline Strip 整体隐藏
 
 ---
 
-## 功能点 5: 看板与泳道
+## 功能点 5: 看板主区域
 
 ### 用户故事
 
-作为开发者, 我希望在一个看板里同时看到每条命令的 tasks、sub-agents、rules、hooks, 以及运行中的终端会话。
-
-### 字段定义
-
-`Lane` 组件 props 由 `Workspace` 派生, 不持有独立状态。`AgentCardState` 独立存于 `workspaceStore.cards`。
+作为用户，我希望看板以合理的布局占满剩余屏幕空间，并能横向滚动查看所有泳道。
 
 ### 业务规则
 
-1. Board 区域横向滚动, 纵向固定高度 `100vh - 84px - 28px` (顶栏 46 + pipeline 38 = 84; 底部 retro timeline 28)
-2. 主泳道宽度 360px, helper 泳道宽度 320px 且边框改虚线
-3. lane-head 分两行: 第一行 idx 徽章 + 斜杠命令名 + count chip + gate-badge (若有); 第二行 `desc` + artifact tags
-4. artifact tag 分两色: 输入 (蓝色, 来自 `Command.inputs`)、输出 (绿色, 来自 `Command.outputs`)
-5. lane-body 纵向分四区, 顺序固定: `tasks` → `MAIN` agents → `SUB` agents → `SKILL` → `HOOK`; 该区无数据时对应 label 隐藏
-6. 每个分区顶端有一条 section label (小圆点 + 字母色分类), 颜色严格对应 `kind` (main 绿 / sub 紫 / skill teal / hook amber)
-7. lane-foot 是一个 `+ add terminal` 虚线按钮, 点击在本泳道底部新建一张 `kind: 'main'` 的 AgentCard, 并自动 `pty_spawn`
-8. 泳道之间 connector 占 52px, SVG 箭头从上一泳道右侧中段指向下一泳道左侧中段
-9. connector 中央浮动 `arrow-label` 显示下游命令 `inputs` 数组首个 artifact (无 inputs 则省略 label)
-10. gate 类 connector (下游命令是 gate) 用 amber 色 + 菱形前缀符号 ◆
-11. 卡片跨泳道拖拽时: PTY 保留 (`ptyId` 不变), 仅修改 `AgentCardState.laneId` 并刷新 UI; 不动任何文件
-12. 拖拽过程中目标泳道 lane-body 应用 `.drop-active` 样式 (浅绿底 + inset 边框)
-13. 空泳道 (无 tasks + 无 cards) 在 lane-body 中显示自定义空态占位 (lucide `Inbox` 图标 + 灰色提示), 文案「No cards yet, drop here or + add terminal」
-14. 水平滚动条使用暗色主题样式 (高 10px, 轨道透明, thumb `--line` 色)
-
-### 数据契约
-
-纯前端 store 派生, 无后端接口。跨泳道拖拽的写入操作 (绑定到 Command) MVP **只修改内存状态**, 不回写文件。
-
-### 交互流程
-
-```
-拖拽 → onDragStart 在 dataTransfer 写入 cardId
-     → onDragOver 在所有 lane-body 上高亮 .drop-active
-     → onDrop 目标 lane 读取 cardId, 调 store.rebindCard(cardId, newLaneId)
-     → 箭头消失, 卡片出现在新泳道底部
-```
-
-### 异常场景
-
-| 场景                           | 预期行为                                                |
-| ------------------------------ | ------------------------------------------------------- |
-| 命令文件被外部删除             | 泳道消失, 其中所有卡片迁移到「默认泳道」(第一个主命令), PTY 保留 |
-| 拖拽松手在 Board 外            | 动作忽略, 卡片回到原泳道                                |
-| 卡片被拖入 gate 泳道 (非主命令) | 允许, 但顶部 toast「This lane is a gate; content here is informational」 |
+1. Board 使用 `position: absolute; inset: 84px 0 28px 48px`（top = TopBar 46px + Pipeline 38px = 84px；bottom = RetroTimeline 28px；left = Activity Bar 48px）
+2. 横向滚动（overflow-x: auto），纵向不滚动（overflow-y: hidden）
+3. 背景叠加两个径向渐变：左上角绿色光晕（`radial-gradient(1400px 500px at 10% 0%, rgba(110,231,127,0.04), transparent 60%)`）+ 右下角蓝色光晕（`radial-gradient(1200px 500px at 90% 100%, rgba(122,162,255,0.04), transparent 60%)`）
+4. Shell Panel 打开时，bottom 从 28px 切换为 268px（Shell 240px + RetroTimeline 28px），过渡动画 `transition: bottom 200ms ease`
+5. 横向滚动条高度 10px，拇指色 `var(--line)`，hover 时 `var(--line-2)`
+6. 内部 `.board-inner` 为 flex row，高度 100%，`align-items: stretch`，`min-width: max-content`
 
 ---
 
-## 功能点 6: 终端卡片
+## 功能点 6: 泳道
 
 ### 用户故事
 
-作为开发者, 我希望在看板上直接开启真实的终端会话, 在里面运行 `claude /prd "..."` 等 Claude Code 命令, 并实时看到输出。
-
-### 字段定义
-
-| 字段    | 类型                                     | 说明                                     |
-| ------- | ---------------------------------------- | ---------------------------------------- |
-| id      | string                                   | 运行时生成 `aXXXXX`, 非持久化            |
-| kind    | `'main'` / `'sub'` / `'skill'` / `'hook'` | 决定左侧彩色条和 kind-tag 颜色           |
-| status  | `'idle'` / `'run'` / `'ok'` / `'err'`   | PTY 运行状态                              |
-| title   | string                                   | 卡片标题, 默认 = 绑定命令 / agent 名      |
-| ptyId   | string (nullable)                        | 对应的 PTY 进程 id, null 表示未启动      |
-| cwd     | string                                   | PTY 工作目录, 默认 = workspace `rootPath` |
-| size    | `{ width: number, height: number }`      | 自定义尺寸, 最小 220×160, 持久化到 localStorage |
+作为用户，我希望每个流水线步骤有一条独立泳道，清晰展示该步骤下的所有 Agent，以便管理工作流。
 
 ### 业务规则
 
-1. 卡片创建时立即调用 `pty_spawn(cwd, cols, rows)` 拿到 `ptyId`, `status` 初始设为 `idle`
-2. 卡片左侧 3px 彩色条颜色严格按 `kind`: main 绿 / sub 紫 / skill teal / hook amber
-3. kind-tag 文字 uppercase 展示 (MAIN / SUB / SKILL / HOOK), 字号 9px
-4. 卡片头高 30px 左右, 从左到右: 红黄绿三灯 (macOS 样式) + kind-tag + title (可省略) + status badge + `⋯` 菜单
-5. status badge 颜色映射: idle 灰 / run amber / ok 绿 / err 红, 字号 9px
-6. 订阅 `pty_output` 事件, `data` 段用 `xterm.write(data)` 写入终端
-7. xterm 的 `onData` 回调调 `pty_write(ptyId, data)` 把用户输入发回
-8. 收到 `pty_exit` 事件后, 根据 `code`: 0 → `ok`, 非 0 → `err`
-9. 卡片销毁时 (移出 DOM / 泳道删除 / 手动 delete) 必须调 `pty_kill(ptyId)`, 否则 Rust 端资源泄漏
-10. `⋯` 菜单项顺序: Open fullscreen (F) / Duplicate (⌘D) / Rename / Kill / Delete (⌫)
-11. Delete 菜单: 若 `status = run` 弹二次确认「PTY is running, kill and delete?」
-12. Duplicate 新建一张卡片绑定同一 `commandId`, 开独立 PTY, `cwd` 与源卡片一致
-13. 双击卡片头切换 `collapsed` 状态, 折叠后只显示卡片头 (隐藏 `.term` 和 `.agent-desc`)
-14. Fullscreen 弹系统模态 (focus-veil + focus-box), 900×620 或 90vw/85vh 取小, 同一 PTY 实例不重开
-15. 模态内 Esc 或点遮罩关闭; 关闭后卡片回到原位置, PTY 不断
-16. Shift / Cmd + 点击实现多选, 顶栏浮出批量操作条 (Kill all / Delete all)
-17. 鼠标按住空白区拖框实现框选, 矩形内所有卡片加入选中集
-18. 卡片右下角有一个 SVG resize handle, 鼠标拖动改 `size`, 最小 220×160, 最大 900×800
-19. 窗口 resize 时按 `size.cols = Math.floor(width / 8)`, `size.rows = Math.floor(height / 20)` 调 `pty_resize`
-20. PTY 启动前若收到 `pty_output` 事件, 前端要缓存 data 队列, 等 xterm 实例挂载后一次性 flush
-
-### 数据契约
-
-#### 调用的 Tauri command
-
-| 操作         | command       | 参数                                   |
-| ------------ | ------------- | -------------------------------------- |
-| 启动 PTY     | `pty_spawn`   | `cwd: string, cols: u16, rows: u16`   |
-| 写入键盘输入 | `pty_write`   | `ptyId: string, data: string`         |
-| 调整尺寸     | `pty_resize`  | `ptyId: string, cols: u16, rows: u16` |
-| 杀死进程     | `pty_kill`    | `ptyId: string`                        |
-
-#### 事件
-
-| 事件          | 方向      | payload                        |
-| ------------- | --------- | ------------------------------ |
-| `pty_output`  | Rust → JS | `{ ptyId: string, data: string }` |
-| `pty_exit`    | Rust → JS | `{ ptyId: string, code: number }` |
-
-### 异常场景
-
-| 场景                            | 预期行为                                         |
-| ------------------------------- | ------------------------------------------------ |
-| `pty_spawn` 失败 (shell 不存在) | `status = err`, 卡片正文区显示 stderr            |
-| PTY 被系统杀死                  | 收到 `pty_exit code ≠ 0`, `status = err`        |
-| 卡片未挂载就收到 `pty_output`   | 缓存到队列, xterm 挂载后一次性 flush            |
-| `cwd` 已被删除                  | `pty_spawn` 返回 err, 卡片显示「cwd missing」    |
-| 同时发起大量 `pty_write`        | 前端按 300ms debounce 聚合后再发, 避免 IPC 拥塞 |
+1. 标准泳道 flex-basis 360px，Helper 泳道 flex-basis 320px（虚线边框 `border-style: dashed`）
+2. 泳道头部（`.lane-head`）背景 `var(--bg-2)`，底部边框分隔，包含两行：
+   - 第一行：步骤编号方块（22×22px）+ 命令名（`/` 号绿色，13px 加粗）+ 卡片计数气泡 + 弹性空白 + GATE 徽章（有门禁时显示，琥珀色）
+   - 第二行：描述文字（11px，`var(--text-3)`）+ 产出物标签（in=蓝色；out=绿色）
+3. 产出物标签（`.artifact-tag`）：mono 9.5px，圆角 10px；in 类型蓝色边框蓝色文字；out 类型绿色边框绿色文字
+4. 泳道主体（`.lane-body`）纵向滚动，padding 12px，gap 10px
+5. 分区标签（`.lane-section-label`）：UPPER_CASE，前有 4×4px 圆点，颜色：MAIN=绿、SUB-AGENTS=紫、SKILLS=青、LOGS=琥珀
+6. 泳道主体为拖拽放置目标，drag-over 时显示绿色内阴影：`box-shadow: inset 0 0 0 1px rgba(110,231,127,0.25)`
+7. 泳道底部（`.lane-foot`）有「+ add sub-agent」虚线按钮，hover 时文字变绿、边框绿色
+8. 泳道无卡片时，主体显示「空泳道」提示文字，居中，`var(--text-3)`
 
 ---
 
-## 功能点 7: 规则抽屉
+## 功能点 7: 泳道连接箭头
 
 ### 用户故事
 
-作为开发者, 我希望快速查看项目里所有规则, 含优先级、触发泳道, 以及当前已知的违规情况。
+作为用户，我希望相邻泳道间有视觉连接并显示流转产出物，以便理解步骤间的依赖关系。
 
 ### 业务规则
 
-1. RulesDrawer 从屏幕右侧滑入, 宽 400px, 外层加背景模糊遮罩 (`backdrop-filter: blur(3px)`)
-2. Drawer header 显示「Rules (N)」, N = `Workspace.rules.length`, 右侧关闭按钮 `×`
-3. 规则列表按 `priority` 分组并排序 P0 → P1 → P2, 每组可折叠 (默认全展开)
-4. 每条 Rule 显示: priority badge (P0 红 / P1 橙 / P2 灰) + title + 一行 desc + lanes chip 列表
-5. 点击 lane chip 关闭 Drawer 并让 Board 滚动到该泳道并高亮 2s
-6. 每条 Rule 右侧有 `View source` 按钮, 点击弹 md 编辑器 (脱离 Drawer, 层级更高)
-7. 每条 Rule 的 priority badge 点击可就地切换 (P0 ↔ P1 ↔ P2 循环), 保存调 `update_frontmatter(path, { priority: 'P0' })`
-8. Drawer 底部固定 Violations 折叠区, 徽章数 > 0 时红色显眼
-9. MVP 的 Violations 数据源为 Rust 端硬编码 seed (3 条), v2 接入真实静态扫描
-10. 点击 Violation 条目跳对应源文件 md 编辑器 (MVP 只打开文件, v2 定位到行)
-11. Drawer 打开时禁用看板的拖拽事件, 避免双 drag context 冲突
-
-### 数据契约
-
-| 操作         | command              | 参数                     |
-| ------------ | -------------------- | ------------------------ |
-| 改 priority  | `update_frontmatter` | `path, { priority }`     |
-| 读 rule 源码 | `read_file_raw`      | `path`                   |
-
-### 异常场景
-
-| 场景                              | 预期行为                                 |
-| --------------------------------- | ---------------------------------------- |
-| priority 枚举外的值               | 自动归为 P2 + 记 `scan_errors`           |
-| lanes 里引用不存在的 `cmd_id`     | chip 显示 `?cmd_id?` 样式 + 警告色边框  |
+1. 相邻泳道间有 52px 宽的 Connector 区域，内含 SVG 水平箭头和产出物标签
+2. 产出物标签（`.arrow-label`）：mono 9.5px，圆角 10px，显示上一步骤的 output 文件名（如 `PRD.md →`），绿色 tag 前缀
+3. Gate Connector：产出物标签改为琥珀色边框/背景，前缀「◆ 」，显示门禁命令名
+4. Connector 区域不参与鼠标事件（`pointer-events: none`），仅标签本身可交互
 
 ---
 
-## 功能点 8: 文档浏览器
+## 功能点 8: Agent 卡片
 
 ### 用户故事
 
-作为开发者, 我希望在工具里直接翻阅 `WORKFLOW.md` / `DECISIONS.md` / 目录 README, 不用切到 VSCode。
+作为用户，我希望每张 Agent 卡片清晰显示类型、状态和终端输出，以便实时掌握每个 Agent 的运行情况。
 
 ### 业务规则
 
-1. 点顶栏 Docs 按钮弹模态, 尺寸 800×600 或 90vw/85vh 取小
-2. 模态内左侧 1/3 宽是文件树, 按路径层级排列所有 `StaticDoc`; 右侧 2/3 宽是 markdown 渲染区
-3. markdown 渲染使用 `react-markdown` + `remark-gfm`, 支持 table / task list / code fence
-4. markdown 内相对链接 (`./xxx.md` 或 `../xxx.md`) 点击在本模态内切换文档, 不跳系统浏览器
-5. markdown 内 workspace 绝对路径链接 (`workspace/xxx` 或 `.claude/xxx`) 解析为 workspace 内文件, 弹 md 编辑器
-6. 外链 (http/https) 点击调 Tauri shell API 打开系统浏览器
-7. 文件树右键菜单: 「Open in VSCode」 (调外部 shell) / 「Reveal in Finder/Explorer」
-8. 顶部搜索框做全文搜索, 命中时高亮关键词, Enter 跳下一条
-9. Esc 关闭模态, 但下次打开保留最后浏览的文档路径 (存 localStorage)
-
-### 数据契约
-
-| 操作     | command            | 参数     |
-| -------- | ------------------ | -------- |
-| 读内容   | `read_file_raw`    | `path`   |
-
-### 异常场景
-
-| 场景                | 预期行为                                      |
-| ------------------- | --------------------------------------------- |
-| 文件大小 > 1MB      | 只渲染前 1MB, banner 提示「File truncated」  |
-| 链接目标不存在      | toast 错误 + 留在当前文档                     |
-| 搜索关键词过短 (<2) | 不执行搜索, 提示「至少输入 2 个字符」        |
+1. 卡片左侧 3px 实色边框区分 kind：main=`var(--green)`、sub=`var(--purple)`、skill=`var(--teal)`、hook=`var(--amber)`
+2. 卡片头部（`.agent-head`）背景 `var(--bg-3)`，`cursor: grab`，包含：macOS 交通灯（红/黄/绿各 9px 圆）+ 标题（mono 11.5px）+ kind 标签 + 状态徽章 + 菜单按钮（···）
+3. Kind 标签样式（均大写）：main=绿色背景、sub=紫色背景、skill=青色背景、hook=琥珀色背景
+4. 状态徽章值及颜色（均大写）：idle=灰色 / run=琥珀色 / ok=绿色 / err=红色 / wait=蓝色
+5. run 状态时，状态徽章应有闪烁/脉冲动画
+6. 卡片 idle 状态时，终端区域显示「点击运行 /<cmd>」占位提示，居中，可点击触发 spawn
+7. 交通灯功能：红=Kill Agent / 黄=Pause 或 Resume / 绿=Restart
+8. 点击卡片（非交通灯/按钮区域）时打开焦点视图（#卡片详情焦点视图）
+9. 右键卡片弹出右键菜单（#右键菜单）
+10. 卡片可在同一泳道内拖拽排序，拖拽中 opacity 0.45
+11. 选中（activeCard）：`border-color: rgba(110,231,127,0.5); box-shadow: 0 0 0 1px rgba(110,231,127,0.3), 0 6px 22px rgba(0,0,0,0.45)`
+12. 折叠状态（collapsed）：隐藏描述文字和终端区域，只显示头部
+13. Pinned 卡片不可被拖拽，头部显示 🔒 图标
 
 ---
 
-## 功能点 9: PRD 预览与编辑
+## 功能点 9: 卡片内嵌终端
 
 ### 用户故事
 
-作为产品 / 研发, 我希望在看板里直接改 PRD 正文, 不用切到 VSCode, 保证 PRD 是真实可编辑的活文档。
-
-### 字段定义 (编辑态)
-
-| 字段   | 类型                                       | 必填 | 校验                  |
-| ------ | ------------------------------------------ | ---- | --------------------- |
-| body   | string (markdown)                          | 是   | 非空                  |
-| status | `'draft'` / `'active'` / `'archived'`     | 是   | 枚举                  |
+作为用户，我希望每张 Agent 卡片内嵌真实的 PTY 终端，以便看到 Agent 运行输出并可交互输入。
 
 ### 业务规则
 
-1. 在 PRDSelector 下拉点某条 PRD → 打开 PRDPreview 模态, 默认只读渲染 markdown
-2. PRDPreview 顶部右侧有 `Edit` 按钮, 点击切到编辑态 (左 textarea, 右实时预览双栏)
-3. MVP 编辑器使用 `<textarea>` + 实时 `react-markdown` 预览, v2 换 CodeMirror 6
-4. 编辑态 `⌘S` / `Ctrl+S` 调 `write_file(filePath, content)`, 成功 toast「Saved」, 失败 toast「Save failed: {reason}」
-5. 编辑态 `⌘Enter` / `Ctrl+Enter` 保存并关闭模态
-6. Esc 键: 无 dirty 直接关模态; 有 dirty 弹确认「Discard changes?」, 确认后关闭
-7. 打开 PRD 时记录文件 mtime; 每次写回前先重读 mtime, 若与记录值不一致 (外部改过), 弹三选一对话框:「Keep mine / Use disk / Merge」, MVP 只实现前两个
-8. 写回时自动把 frontmatter 的 `updatedAt` 字段改为当前 ISO 时间
-9. 写回成功后重算 `tbdCount`, 顶栏 chip 和 PRDSelector 同步刷新
-10. 新建 PRD 调 `create_file(docs/prds/PRD-{nextId}.md, template='prd')`, 新 id = 现有最大数字 id + 1 (首次 = PRD-001)
-11. 删除 PRD 走右键 → Delete, 二次确认后 `delete_file`; 若当前激活 PRD 被删, 自动切到列表第一项 PRD
-12. 模态关闭前发现 dirty 且用户选 Discard, 前端 store 回滚 `body` 到打开时的快照
-13. 正文内检测到 git merge conflict 标记 (`<<<<<<<` / `=======` / `>>>>>>>`), 编辑器切换只读, 顶部横条提示「Resolve conflict first」
+1. 终端背景纯黑（#000），字体 JetBrains Mono 11.5px，行高 1.5
+2. 输出区域支持 ANSI 颜色分类：green=命令提示符 / blue=路径 / red=错误 / amber=警告 / teal=成功 / purple=特殊标记 / text-3=淡出信息
+3. 输出区最大高度 220px（short 卡片 110px），超出时纵向滚动，滚动条宽 6px
+4. 底部输入行：绿色 prompt（`▌`）+ 蓝色路径 + 透明输入框，光标颜色绿色
+5. 用户在终端输入时，内容通过 `pty_write` 传给 Rust PTY 进程
+6. Rust PTY 输出通过 `pty_output` event 推送，前端监听后写入 xterm 实例
+7. 终端尺寸变化时调用 `pty_resize` + xterm addon-fit 自动适配
+8. 卡片关闭/删除时调用 `pty_kill` 释放进程
+9. 同一 cardId 重复 spawn 时，先 kill 旧进程再起新进程
 
-### 数据契约
+### Tauri IPC
 
-| 操作         | command              | 参数                           |
-| ------------ | -------------------- | ------------------------------ |
-| 读内容       | `read_file_raw`      | `path`                         |
-| 保存         | `write_file`         | `path, content`                |
-| 新建         | `create_file`        | `path, template='prd'`         |
-| 删除         | `delete_file`        | `path`                         |
-| 改 status    | `update_frontmatter` | `path, { status }`             |
-
-### 异常场景
-
-| 场景                       | 预期行为                                          |
-| -------------------------- | ------------------------------------------------- |
-| 保存时磁盘满               | toast 错误 + 保留编辑内容不关闭                    |
-| 保存时权限不足             | toast 错误 + 保留编辑内容                          |
-| 保存时文件被外部删除       | 弹对话框「File was deleted, save as new?」         |
-| 打开后文件被外部删除       | 编辑器顶栏横条「File missing, 'Save' will recreate」 |
-| 合并 merge conflict 标记   | 只读模式, 禁止编辑, 引导先解决冲突                |
+| 操作 | Command / Event | 说明 |
+|------|----------------|------|
+| 启动 PTY | `pty_spawn` | 入参：cardId, cmd, cwd |
+| 写入输入 | `pty_write` | 入参：sessionId, data |
+| 调整尺寸 | `pty_resize` | 入参：sessionId, cols, rows |
+| 终止进程 | `pty_kill` | 入参：sessionId |
+| 接收输出 | Event `pty_output` | Payload: { sessionId, data: string } |
 
 ---
 
-## 功能点 10: 任务与 Bug 管理
+## 功能点 10: 底部时间轴
 
 ### 用户故事
 
-作为开发者, 我希望在看板上看到每条命令对应的任务和缺陷, 并能直接切换 status 而无需手改 JSON / markdown。
-
-### 字段定义
-
-| 字段               | 类型                                                              | 说明            |
-| ------------------ | ----------------------------------------------------------------- | --------------- |
-| Task.status        | `'pending'` / `'in-progress'` / `'done'` / `'blocked'`           | 任务状态        |
-| BugReport.status   | `'triage'` / `'reproducing'` / `'fixing'` / `'fixed'`            | 缺陷处理状态    |
-| BugReport.priority | `'P0'` / `'P1'` / `'P2'`                                          | 缺陷优先级      |
+作为用户，我希望在屏幕底部看到 /meta-audit 历史和工作区状态，以便了解代码健康度趋势。
 
 ### 业务规则
 
-1. `Task` 按 `lane` 字段归到对应泳道 tasks 分区顶部, 按 `id` 字典序升序
-2. `TaskRow` 单行展示: id + title + status-badge + rules-chips + deps-chips
-3. 点 status-badge 弹枚举下拉, 选完调 `update_task_status(manifestPath, taskId, status)`, 写回对应 `docs/tasks/*.json`
-4. 写 JSON 时必须保持原文件 key 顺序和数组顺序, 只改动目标 task 对象的 `status` 字段
-5. deps-chip 点击高亮被依赖的 Task 所在 `TaskRow` (同步滚动定位)
-6. rules-chip 点击打开 RulesDrawer 并滚动到该规则
-7. `+ task` 按钮在泳道 tasks 分区底部, 点击弹简单 input 填 title, id 自动生成 (当前 manifest 中最大数字 + 1)
-8. `BugReport` 全部汇集到 `/fix` 泳道, 按 `priority` 降序 (P0 > P1 > P2), 同 priority 按 `createdAt` 降序
-9. `BugReport` 的 status 切换同样调 `update_frontmatter(path, { status })`
-10. `BugReport` 左侧显示 reporter 头像占位 (姓名首字母 + 随机背景色, 悬停 tooltip 显示全名)
-11. `Task` 删除: 右键 → Delete, 二次确认, 在 `docs/tasks/*.json` 里移除数组项, 其他字段顺序不变
-12. `BugReport` 删除: 右键 → Delete, 二次确认, 调 `delete_file`
-13. 编辑 Task title (双击 title 文字进入编辑态): Enter 保存调 `update_task_status` 的扩展版本 (同一命令多字段 patch), Esc 取消
-
-### 数据契约
-
-| 操作              | command                  | 参数                                                |
-| ----------------- | ------------------------ | --------------------------------------------------- |
-| 改 task status    | `update_task_status`     | `manifestPath: string, taskId: string, status: string` |
-| 改 bug status     | `update_frontmatter`     | `path, { status }`                                  |
-| 改 bug priority   | `update_frontmatter`     | `path, { priority }`                                |
-| 新建 bug          | `create_file`            | `path, template='bug'`                              |
-| 删除 bug          | `delete_file`            | `path`                                              |
-
-### 异常场景
-
-| 场景                           | 预期行为                                      |
-| ------------------------------ | --------------------------------------------- |
-| `tasks.json` 被外部改动        | watcher 触发 reload, UI 自动刷新              |
-| 改 task status 时文件被锁      | 重试一次, 仍失败 toast 错误并回滚 UI         |
-| Task `deps` 引用不存在的 id    | chip 显示 `?id?` 警告色                       |
-| Bug 文件 frontmatter 缺 priority | 降级为 P2, 排序时置于同状态末尾              |
+1. Retro Timeline 固定在屏幕最底部，默认高度 28px；点击后展开至 120px 显示完整历史
+2. 展开/收起有高度过渡动画（0.15s ease）
+3. 收起状态左侧显示：ws 状态指示灯（Ready=绿实心 / Empty=灰空心 / Scanning=琥珀闪烁 / Invalid=红实心）+ 最近一次 drift 数
+4. 收起状态右侧显示：Shell Panel 终端 tab 行（tab 可点击切换，× 可关闭）
+5. 展开状态显示历史列表：每项显示日期 + drift 数 + dead 引用数 + commits 数
+6. drift 颜色：0 = `var(--green)` / 1-2 = `var(--amber)` / 3+ = `var(--red)`
+7. 展开时，键盘左右方向键在历史记录间导航，高亮当前选中时间点
 
 ---
 
-## 功能点 11: 回溯时间轴
+## 功能点 11: 全局 Shell 面板
 
 ### 用户故事
 
-作为 tech lead, 我希望看到历次 `/meta-audit` 的结果, 追踪代码漂移趋势。
+作为用户，我希望有一个全局底部终端面板，以便在不离开看板的情况下执行任意 shell 命令。
 
 ### 业务规则
 
-1. RetroTimeline 固定在 Board 底部, 默认高度 28px (仅显示一行摘要: 「Last audit: 2026-04-21 · drift 2 · dead 0」)
-2. 点击展开到 120px, 横向列出所有 `Retrospective` 节点 (圆点 + 日期 + 三个小徽章 drift/dead/commits)
-3. 节点按日期升序从左往右排, 最新的在右
-4. 点击节点弹模态展示该 retro 详情 (markdown 渲染)
-5. 右侧有 `+ new retro` 按钮, 点击在 `/meta-audit` 泳道新建一张 AgentCard 并自动 auto-run (`pty_write('claude /meta-audit\n')`)
-6. `drift` 数字颜色: 0 绿 / 1-3 amber / >3 红
-7. `commits` 字段显示为 `git log` 风格的小胶囊, 悬停 tooltip 显示最近 3 条 commit 摘要
-8. 鼠标悬停节点显示 tooltip, 含日期 + drift + dead + commits 四项摘要
-9. 键盘 Left/Right 切换选中节点 (展开态下)
-
-### 数据契约
-
-由 `Workspace.retrospectives` 派生, 无独立接口。
-
-### 异常场景
-
-| 场景                     | 预期行为                                                |
-| ------------------------ | ------------------------------------------------------- |
-| retrospectives 为空       | 时间轴显示「No retros yet, run /meta-audit to generate」 |
-| retro 文件 frontmatter 缺 date | 用文件 mtime 替代 date                            |
+1. Shell Panel 固定定位：`left: 48px; right: 0; bottom: 28px; height: 240px`
+2. 默认隐藏（`transform: translateY(100%)`），⌘`（反引号）切换显示/隐藏，TopBar >\_Shell 按钮同等效果
+3. 显示/隐藏动画：220ms `cubic-bezier(0.32, 0.72, 0, 1)`
+4. Shell Panel 打开时，Board bottom 从 28px 增加到 268px，防止内容被遮挡
+5. Tab 栏高 32px，活跃 Tab 黑色背景 + 边框，Tab 有 × 关闭按钮
+6. + 按钮新建 tab，自动 spawn 新 PTY 会话（默认 shell，cwd = workspace rootPath）
+7. 头部右侧有 minimize / maximize / close 三个操作按钮
+8. close 等同 ⌘`（关闭面板，不销毁 PTY）；maximize 将面板高度扩展至覆盖 Board
+9. 面板内终端规则同 #卡片内嵌终端
 
 ---
 
-## 功能点 12: 文件系统集成
+## 功能点 12: 通知抽屉
 
 ### 用户故事
 
-作为产品 / 研发, 我希望在工具里改东西能像改 VSCode 一样立刻生效, 也能接收来自 VSCode 的改动, 双向无感同步。
-
-### 业务规则 (写入)
-
-1. 所有写操作只能由 Rust 端执行, 前端通过 Tauri command 调用, 禁止前端直接 fs.write
-2. 所有写操作先对 `path` 做 `canonicalize`, 然后校验结果是否以 workspace `rootPath` 开头, 否则拒绝
-3. `write_file` 必须原子写: 写临时文件 → `fsync` → `rename` 覆盖原文件; 禁止 truncate + write
-4. `update_frontmatter` 解析 YAML 时保留键顺序、注释、空行, 仅改动目标字段; 正文 markdown 不重写
-5. `update_task_status` 打开 `tasks.json` 后, 只改目标 task 对象的目标字段, 其他 key 顺序不变; 使用保顺序的 JSON 解析库 (Rust 端 `serde_json::Map` + 显式顺序)
-6. 写入前把目标文件加入 watcher 白名单, 写入完成 300ms 后再移除, 避免「自己写 → 自己触发 reload」循环
-7. UI 采用乐观更新: 改动即刻反映到 UI, 后台写入; 写失败 toast 错误 + 回滚 UI
-8. 写失败时 toast 必须展示具体原因 (PermissionDenied / DiskFull / NotFound / Other), 不能只说 Failed
-
-### 业务规则 (监听)
-
-1. Watcher 基于 Rust `notify` crate, 监听整个 `rootPath` 递归, 排除 `.git` / `node_modules` / `dist` / `target`
-2. 事件 300ms debounce 聚合, 同一批变化合并成一个 `workspace_changed` event
-3. event payload 包含 `kind` (`commands` / `prds` / `tasks` / `agents` / `rules` / `hooks` / `bug-reports` / `retros` / `static-docs`) 和 `diff` (`added` / `modified` / `deleted` 三个文件列表)
-4. 前端根据 `diff` 做增量更新, 只刷新受影响的 store 切片, 不触发全表重绘
-5. 从 Rust 发事件到 DOM 可见变化必须在 500ms 内完成 (性能目标)
-6. 写入自己时被白名单过滤, 不触发 reload (见写入规则 6)
-
-### 业务规则 (冲突处理)
-
-1. 当前 UI 有 dirty (编辑器) 的文件被外部修改时, 弹冲突对话框「Keep mine / Use disk」(MVP 二选一)
-2. 当前 UI 无 dirty 的文件被外部修改时, 静默 reload UI
-3. 当前编辑的文件被外部删除时, toast「File deleted externally」, 编辑器切「Save as new」模式 (Save 会重新创建)
-4. 文件出现 git merge conflict 标记时, 编辑器切只读 + banner「Resolve conflict first」
-5. Watcher 启动失败时, 顶栏显示红色徽章「Watch offline」, 工具仍可用但需手动点 Reset 刷新
-
-### 数据契约
-
-#### 写入类 command
-
-| 命令                   | 参数                                         | 返回                  |
-| ---------------------- | -------------------------------------------- | --------------------- |
-| `read_file_raw`        | `path: string`                               | `Result<string>`      |
-| `write_file`           | `path, content`                              | `Result<()>`          |
-| `create_file`          | `path, template?: string`                    | `Result<()>`          |
-| `delete_file`          | `path`                                       | `Result<()>`          |
-| `rename_file`          | `from, to`                                   | `Result<()>`          |
-| `update_frontmatter`   | `path, patch: serde_json::Value`             | `Result<()>`          |
-| `update_task_status`   | `manifestPath, taskId, status`               | `Result<()>`          |
-
-#### 监听类 command / event
-
-| 名称                 | 类型     | 参数 / payload                                                                 |
-| -------------------- | -------- | ------------------------------------------------------------------------------ |
-| `start_watcher`      | command  | `path: string`                                                                 |
-| `stop_watcher`       | command  | -                                                                              |
-| `workspace_changed`  | event    | `{ kind: string, diff: { added: string[], modified: string[], deleted: string[] } }` |
-
-### 异常场景
-
-| 场景                         | 预期行为                                                  |
-| ---------------------------- | --------------------------------------------------------- |
-| Watcher 启动失败             | 顶栏红徽章「Watch offline」, 禁用实时刷新, 手动 Reset 可用 |
-| 外部同时多文件改动           | 300ms debounce 聚合, 一次性刷新                          |
-| 前端收到未识别的 `kind`      | 忽略该事件 + console warn                                 |
-| 前端连续 IPC 失败 > 3 次     | 弹系统级 banner「Backend unresponsive, restart suggested」 |
-
----
-
-## 功能点 13: 工具面板
-
-### 用户故事
-
-作为开发者, 我希望能调整看板密度和辅助泳道显隐, 以及在需要时一键 Reset。
+作为用户，我希望通过铃铛图标查看所有系统通知，以便了解 Agent 执行结果和告警。
 
 ### 业务规则
 
-1. Tweaks 面板固定在右下角 14px, 宽 260px, 默认折叠为一个小圆钮 (24×24, 绿色发光点)
-2. 点小圆钮展开为面板, 顶部标题「TWEAKS」, 面板关闭按钮 `×`
-3. 面板分组顺序固定: Density / Helper lanes (workflow 视图独有) / Show descriptions (generic 视图独有) / Column width (generic 视图独有) / Accent / Theme / Reset
-4. Density 段控件 (comfortable / compact 互斥), 选中态绿色, 改动后立即切换 lane-body 与 generic card 的 padding / font-size
-5. Helper lanes (Show / Hide 互斥), 隐藏时 Board 只渲染主 pipeline 泳道; **仅 workflow 视图可见**
-6. Show descriptions (Y / N), 控制 generic 看板卡片是否显示 desc 段; **仅 generic 视图可见**
-7. Column width (narrow / standard / wide 三档, 默认 standard); **仅 generic 视图可见**
-8. Theme (Dark / Light 互斥), Light 标「v2」灰化禁用, MVP 只有 Dark
-9. 所有面板改动都写入 Rust 端 `app_state.json` (键 `tweaks.<field>`), 下次启动保留; **不写 localStorage**
-10. Reset workflow 按钮点击弹二次确认「Clear all UI state and rescan?」, 确认后清 `app_state.json` 中除 `recent_workspaces` 外所有键并调 `scan_workspace`
-11. 面板任何改动立即生效, 无 Apply 按钮
-12. Tweaks 编辑模式 (设计稿 `app.jsx` `EDITMODE-BEGIN/END`): 仅在 `npm run dev` 时显示, 生产构建移除
-
-### 数据契约
-
-纯本地, 无后端接口。
-
-### 异常场景
-
-| 场景               | 预期行为                                       |
-| ------------------ | ---------------------------------------------- |
-| localStorage 被禁  | 改动仍生效本次会话, 下次启动回默认             |
-| Reset 期间 scan 失败 | 保留旧 Workspace 数据 + toast「Reset failed, keeping old state」 |
+1. 通知抽屉由 TopBar 铃铛按钮触发，`position: fixed; top: 50px; right: 12px; width: 360px`，最大高度 `calc(100vh - 80px)`
+2. 通知类型：ok=绿色圆点 / err=红色圆点 / warn=琥珀色圆点 / info=灰色圆点
+3. 未读通知背景 `rgba(110,231,127,0.04)`，已读无特殊背景
+4. 每条通知：类型圆点 + 标题（11.5px）+ meta 信息（时间/来源，10.5px 灰色）
+5. 顶部有「Mark all as read」按钮，点击清空所有未读标记，铃铛徽章归零
+6. 无通知时显示空状态「No notifications」
+7. 点击通知项跳转到对应泳道并高亮相关卡片
+8. 点击抽屉外侧区域关闭抽屉
 
 ---
 
-## 功能点 14: 通用看板视图
+## 功能点 13: 命令面板
 
 ### 用户故事
 
-作为开发者, 我希望除了「按命令流水线排泳道」的 Workflow 视图, 也能切到一个**通用看板** (Backlog / Ready / Running / Done) 自由组织终端会话, 适合一次性脚本、监控任务、临时实验等不属于 8 步法流程的工作。
-
-### 字段定义
-
-通用看板视图以 `GenericBoard` 数据模型驱动 (与 Workflow 视图的 `Workspace.commands / tasks` 是**两套并行模型**, 互不干扰):
-
-| 字段              | 类型                                            | 必填 | 校验规则                                  | 默认值          |
-| ----------------- | ----------------------------------------------- | ---- | ----------------------------------------- | --------------- |
-| columns           | `GenericColumn[]`                               | 是   | 至少 1 列, 最多 8 列                      | 系统预置 4 列   |
-| cards             | `GenericCard[]`                                 | 否   | 卡片 `col` 必须命中 columns 中某条 `id`   | []              |
-| `GenericColumn.id`| string                                          | 是   | 全 board 内唯一, snake_case 或 kebab-case | -               |
-| `GenericColumn.title` | string                                      | 是   | 1–24 字符                                 | -               |
-| `GenericColumn.color` | string                                      | 是   | 必须命中 Design Token (见 #顶栏 token 表) | `--text-3`      |
-| `GenericCard.id`  | string                                          | 是   | 全 board 内唯一                           | nanoid(8)       |
-| `GenericCard.col` | string                                          | 是   | 命中某条 column                           | 第一列 id       |
-| `GenericCard.title` | string                                        | 是   | 1–60 字符                                 | -               |
-| `GenericCard.desc`| string                                          | 否   | <= 200 字符                               | ''              |
-| `GenericCard.status` | enum `idle/run/ok/err`                       | 是   | -                                         | `idle`          |
-| `GenericCard.bootCommands` | string[]                              | 否   | 卡片首次 spawn 时按顺序 inject 给 PTY     | []              |
-| `GenericCard.size` | `{ w?: number, h?: number }`                  | 否   | 单位 px, 由 resize 拖拽产生               | -               |
-
-> 持久化: 整张 `GenericBoard` 序列化为 JSON 写到 workspace 内的 `.claude/.kanban-board.json` (用户手动 `.gitignore` 决定是否追踪)。**不使用 localStorage**。
+作为用户，我希望通过 ⌘K 快速搜索并执行任意命令，以便不依赖鼠标完成操作。
 
 ### 业务规则
 
-1. Layout 切换为 `generic` 时, Board 区域改用通用看板, 顶栏 / RetroTimeline / 抽屉保持挂载; PipelineStrip **隐藏** (生成式 + 流水线概念在通用看板里不存在)
-2. 系统预置 4 列, `id` / `title` / `color` 固定: `backlog`(`--text-3`) / `ready`(`--blue`) / `running`(`--amber`) / `done`(`--green`); 用户可重命名 `title`, **不能改 `id` 与 `color` token**
-3. 顶栏「+ Column」按钮新增列, 弹简单输入框收 `title`, `id` 自动从 `title` slugify (重名加后缀 `-2`)
-4. 列右上 `×` 删除该列; 若列内有卡片, 弹确认对话框「Delete N cards or move them to backlog?」, 用户选移动则全部 `col = 'backlog'`
-5. 列宽根据 Tweaks 中 `columnWidth` (narrow=240px / standard=320px / wide=440px) 全局生效
-6. 卡片支持鼠标拖拽到任意列, 释放时 `card.col` 立即更新; 拖拽过程中目标列高亮; 跨列拖拽**不杀 PTY**, 仅改归属
-7. 卡片支持框选 (鼠标按住空白拖出选区) 与 cmd/ctrl+click 多选, 多选状态下批量拖拽 / Kill / Delete
-8. 卡片右下角 12×12 resize 手柄, 拖拽改 `card.size.{w,h}`, 释放时持久化; 双击手柄重置为默认尺寸
-9. 卡片左上角红黄绿灯 (macOS 样式): 红=Delete (含确认) / 黄=Reset PTY / 绿=Maximize (展开成全屏卡片)
-10. 卡片标题双击就地编辑, 失焦保存; ESC 取消改动
-11. 卡片 desc 段在 Tweaks `showDescriptions = false` 时隐藏 (节省纵向空间)
-12. 卡片 `status` 由其绑定的 PTY 自动驱动: 无 PTY → `idle`; spawn 后 → `run`; PTY exit code 0 → `ok`; exit code != 0 → `err`
-13. 卡片首次进入 `running` 列时, 若 `bootCommands` 非空, 依次 `pty_write` 并各跟一个 `\r`; **不在其他列触发**
-14. 顶栏「+ Card」在当前选中列追加新卡, 默认 `title = 'untitled'`, `status = 'idle'`
-15. 设计稿 `card.jsx` 中的 Focus Overlay (双击卡片标题进入大窗口模式) MVP 实现; 关闭后回到原列原位
-16. 通用看板的所有改动 (列变更 / 卡片增删 / 拖拽 / resize / 重命名) 立即写回 `.kanban-board.json`, 走原子写 (#文件系统集成 R1)
-17. 切回 Workflow 视图时, generic 卡片对应的 PTY **不被销毁** (后台保活); 切回时 PTY 仍能读到完整 scrollback
+1. ⌘K 或 TopBar ⌘K 按钮打开命令面板，Esc 关闭
+2. 遮罩：`rgba(0,0,0,0.55)` + `backdrop-filter: blur(2px)` 全屏覆盖
+3. 面板宽 `min(640px, 92vw)`，从屏幕上方 96px 处水平居中显示，border-radius 8px
+4. 顶部搜索输入框（14px mono），打开时自动获焦，placeholder 文字灰色
+5. 结果按组显示（Commands / PRDs / Tasks / Files），每组有灰色大写组标题
+6. 每条结果：图标（16px）+ 名称 + 右侧描述（10.5px 灰色）
+7. 键盘 ↑↓ 导航；激活行：左侧 2px 绿色边框 + `var(--bg-3)` 背景
+8. Enter 执行选中条目（运行命令 / 打开文件 / 跳转泳道）
+9. 面板底部显示键盘快捷键提示：↑↓ 导航 / ↵ 执行 / Esc 关闭
+10. 搜索内容为空时，显示最近使用记录
 
-### 数据契约 (Tauri command)
+---
 
-| 业务操作                | command                  | 参数                                      | 返回                       |
-| ----------------------- | ------------------------ | ----------------------------------------- | -------------------------- |
-| 读取 generic board      | `read_generic_board`     | `path: string` (workspace root)           | `GenericBoard`             |
-| 写入 generic board      | `write_generic_board`    | `path: string, board: GenericBoard`       | `()`                       |
-| 切换 layout             | `set_layout`             | `layout: 'workflow' \| 'generic'`         | `()`                       |
-| 读取 layout             | `get_layout`             | -                                         | `'workflow' \| 'generic'`  |
+## 功能点 14: 卡片详情焦点视图
 
-> PTY 相关命令 (`pty_spawn` / `pty_write` / `pty_resize` / `pty_kill`) 与 Workflow 视图完全共用, 不重复定义。
+### 用户故事
 
-### 交互流程
+作为用户，我希望点击 Agent 卡片后能全屏查看完整终端输出，以便排查问题而不被卡片高度限制。
 
-```
-用户在顶栏点 Layout Toggle → set_layout('generic') → set Zustand layout 状态
-  → useGenericBoardStore.load() → read_generic_board → 渲染列与卡片
-  → 用户拖拽卡片 → 更新 store → write_generic_board (debounce 200ms)
-切回 → set_layout('workflow') → 卡片对应 PTY 后台保活
-```
+### 业务规则
 
-### 异常场景
+1. 点击卡片（非交通灯/按钮区域）打开焦点视图
+2. 遮罩：`rgba(0,0,0,0.65)` + `backdrop-filter: blur(3px)` 全屏覆盖，z-index: 150
+3. 焦点窗口尺寸：`min(900px, 90vw)` × `min(620px, 85vh)`，居中，border-radius 8px
+4. 焦点窗口显示完整 Agent 卡片内容：头部 + 描述 + 全高度终端（无 max-height 限制）
+5. Esc 或点击遮罩关闭焦点视图
+6. 焦点视图与卡片共享同一 PTY 会话（不重新 spawn），关闭后 PTY 继续运行
 
-| 场景                          | 预期行为                                                   |
-| ----------------------------- | ---------------------------------------------------------- |
-| 首次进入无 `.kanban-board.json` | 用系统预置 4 列 + 0 卡片初始化, 写入新文件                |
-| `.kanban-board.json` 损坏 (JSON parse fail) | 备份原文件为 `.kanban-board.json.bak.<ts>`, 用预置初始化, 顶栏 toast「Board reset due to corrupt file」 |
-| 拖到自己所在列                | 视为无操作, 不写盘, 不闪屏                                 |
-| 卡片对应 PTY 已退出           | 卡片显示状态点为 ok/err, 列拖拽仍可用; 双击「绿灯」复活 PTY |
-| 列 `title` 改成空字符串       | 拒绝保存, inline 提示「Title cannot be empty」             |
+---
+
+## 功能点 15: 规则抽屉
+
+### 用户故事
+
+作为用户，我希望查看项目的编码规则和当前违规情况，以便了解代码质量。
+
+### 业务规则
+
+1. 规则抽屉由 TopBar Rules 按钮打开，从右侧滑入
+2. 内容来源：扫描 `.claude/rules/*.md`，解析规则 id / priority / title / desc
+3. 每条规则显示：优先级标签（P0/P1）+ 规则名 + 描述一行
+4. 当前 hook 检测到的违规列在对应规则下方：文件路径 + 消息 + severity（error/warn）
+5. 支持按泳道过滤（显示该步骤相关的规则）
+6. TopBar Rules 按钮红色数字徽章 = error 级别违规总数
+7. Watcher 启动失败时，TopBar 显示红色徽章「Watch offline」，规则抽屉仍可打开
+
+---
+
+## 功能点 16: PRD 选择器
+
+### 用户故事
+
+作为用户，我希望在 TopBar 切换当前激活的 PRD，以便将看板工作与对应需求文档关联。
+
+### 业务规则
+
+1. PRD 选择器显示在 TopBar 左区品牌名后，格式「PRD-ID STATUS ▼」，点击展开下拉列表
+2. 下拉列表来源：扫描 `docs/prds/*.md`，解析 frontmatter 获取 id / title / status / tbd 数
+3. 每条 PRD 显示：PRD-ID、标题（截断省略）、状态徽章（active=绿色 / draft=灰色 / archived=暗色）、[TBD] 计数
+4. 状态 active 的 PRD 排在列表最前
+5. 选择 PRD 后，TopBar stats chip、任务进度跟随切换到该 PRD 的数据
+6. 悬停 PRD 条目时显示该 PRD 的摘要预览（前 3 行正文）
+7. PRD 文件不存在或全部解析失败时，显示「无 PRD」，不阻断看板使用
+8. PRD 内容修改成功后，重算 tbdCount，选择器和 TopBar chip 同步刷新
+
+---
+
+## 功能点 17: 文档浏览器
+
+### 用户故事
+
+作为用户，我希望在不离开应用的情况下浏览 docs/ 目录下的所有文档，以便查阅 PRD、任务和复盘报告。
+
+### 业务规则
+
+1. 文档浏览器由 TopBar Docs 按钮打开，模态框形式，尺寸 `min(800px, 90vw)` × `min(600px, 85vh)`
+2. 左侧文件树：显示 docs/ 目录结构，支持展开/折叠子目录
+3. 点击 .md 文件，右侧预览区使用 react-markdown + remark-gfm 渲染
+4. 代码块有语法高亮
+5. 支持在预览区内点击 #锚点链接跳转
+6. 被浏览的文件被外部删除时，预览区顶部显示警告横条「File missing」
+7. Esc 或点击遮罩关闭浏览器
+
+---
+
+## 功能点 18: 右键菜单
+
+### 用户故事
+
+作为用户，我希望右键点击 Agent 卡片时弹出操作菜单，以便快速执行常用操作而不进入焦点视图。
+
+### 业务规则
+
+1. 右键点击 Agent 卡片弹出上下文菜单，定位在鼠标位置，超出视口时自动翻转方向
+2. 菜单项顺序：Run / Pause / Restart / 分割线 / Duplicate / Move to…（子菜单列出其他泳道）/ 分割线 / Delete
+3. Delete 为 danger 样式，hover 时文字变 `var(--red)`
+4. Delete 点击弹二次确认；确认后销毁卡片及其 PTY 会话
+5. 卡片处于 run 状态时，Run 禁用；idle 状态时，Pause / Restart 禁用
+6. 点击菜单外侧或 Esc 关闭菜单，不执行任何操作
+
+---
+
+## 功能点 19: 微调面板
+
+### 用户故事
+
+作为用户，我希望能快速调整看板的显示密度和自动播放选项，以便根据当前任务定制视图。
+
+### 业务规则
+
+1. Tweaks Panel `position: fixed; right: 14px; bottom: 14px`，宽 260px，border-radius 8px
+2. 默认折叠，点击触发按钮展开/收起
+3. Density（密度）三档分段控制：compact / comfortable / spacious，影响泳道宽度和卡片内边距
+4. Show Helpers：开关切换 /fix 和 /meta-audit 泳道的可见性
+5. Auto-play：启用后，前一步骤完成时自动触发下一步骤的主 Agent spawn
+6. 所有设置持久化（localStorage），应用重启后恢复上次配置
+7. 设置变更实时生效，无需刷新
+
+---
+
+## 功能点 20: 通用看板
+
+### 用户故事
+
+作为用户，我希望在流水线看板之外有一个自由看板管理普通任务，以便处理不属于固定工作流的事项。
+
+### 业务规则
+
+1. 通过 TopBar Layout Toggle 切换到 generic 模式，PipelineStrip 隐藏，Board 切换为通用看板
+2. 通用看板数据持久化到工作区 `.claude/.kanban-board.json`
+3. 默认 4 列：Backlog / Ready / Running / Done
+4. 列可重命名（双击列标题内联编辑），按 Enter 或失焦提交，Esc 恢复原标题
+5. 列标题提交为空时，显示「Title cannot be empty」错误，不提交更改
+6. 列宽三档：narrow（240px）/ standard（320px）/ wide（440px），列头部下拉选择
+7. 删除含卡片的列时，弹确认框「Delete N cards or move them to backlog?」
+8. 卡片可跨列拖拽（HTML5 DnD），drag-over 时列显示绿色内阴影
+9. 卡片移入 running 列时，如有 bootCommands，自动依次执行
+10. 状态变更 200ms debounce 后持久化到 `.kanban-board.json`
+11. `.kanban-board.json` 不存在时，自动创建 4 列默认结构并写入文件
 
 ---
 
 ## 验收清单
 
-> 分 6 个里程碑 (M1 ~ M6), 总计 18 天 (M5 因加入通用看板视图从 2d → 3d); 每个里程碑有独立验收点。
-
-### 里程碑 1 · 壳与扫描 (M1, 3d)
-
-- [ ] Tauri 项目初始化, 启动弹窗口
-- [ ] `empty` 状态 UI + 文件夹选择弹窗
-- [ ] `validate_workspace` + `scan_workspace` 跑通
-- [ ] `scanning` 状态能看到进度条
-- [ ] `invalid` 状态显示缺失项
-- [ ] **验收**: 选中 `claude-code-workflow` 仓库 → 所有命令被扫出来, 能在 console 打印完整 `Workspace` 结构
-
-### 里程碑 2 · 看板渲染 (M2, 3d)
-
-- [ ] TopBar / PipelineStrip / Board / Lane / AgentCard 基础 UI (不含终端)
-- [ ] 数据从 Zustand store 驱动
-- [ ] PRDSelector / RulesDrawer / DocsViewer 开关交互可用
-- [ ] 泳道间 Connector 箭头渲染正确
-- [ ] **验收**: 与设计稿 `Workflow Kanban.html` 做像素级对比, 相似度 ≥ 95%
-
-### 里程碑 2.5 · 写入能力 (M2.5, 2d)
-
-- [ ] Rust 端实现全部写命令 (`write_file` / `create_file` / `update_frontmatter` / `update_task_status` / `delete_file` / `rename_file`)
-- [ ] 原子写 (tmp + rename + fsync) 到位
-- [ ] Path 越权校验到位, 越权测试用例能被正确拒绝
-- [ ] 内嵌 Markdown 编辑器 (textarea + 实时预览) 可用
-- [ ] PRD 正文 / task status / bug status 的 UI → 写回链路跑通
-- [ ] Watcher 白名单去重能力验证 (写自己改动不触发自己 reload)
-- [ ] 外部修改冲突对话框 (Keep mine / Use disk)
-- [ ] **验收**: 在桌面端改 PRD 正文, VSCode 能看到改动; 反之 VSCode 改, 桌面端 UI 在 500ms 内自动刷新
-
-### 里程碑 3 · 终端接入 (M3, 3d)
-
-- [ ] xterm.js 集成到 AgentCard
-- [ ] Rust 侧 `pty_spawn` / `pty_write` / `pty_output` / `pty_exit` 链路全通
-- [ ] 每张卡独立 PTY, 能正常跑 `ls` / `npm -v` / `claude --version`
-- [ ] 卡片销毁时正确 `pty_kill`, 无进程泄漏
-- [ ] **验收**: 在卡片里运行 `claude /prd "做一个登录页"` 能正常交互, 输入输出不丢
-
-### 里程碑 4 · 实时性 (M4, 2d)
-
-- [ ] `notify` watcher 启动 + 事件推送
-- [ ] 新增 / 修改 / 删除 `.claude/commands/*.md` 看板实时变化
-- [ ] PRD 正文改动 → Preview 自动刷新
-- [ ] Tasks JSON 改 status → 对应行颜色实时变
-- [ ] **验收**: 外部编辑器改文件, 桌面端 UI 在 500ms 内更新
-
-### 里程碑 5 · 交互完善 + 通用看板 (M5, 3d)
-
-- [ ] 终端卡片跨泳道拖拽 (Workflow 视图)
-- [ ] 多选框选 + 批量操作 (Kill all / Delete all)
-- [ ] RetroTimeline 展开 / 收起 + 节点点击弹详情
-- [ ] Bug reports 在 `/fix` 泳道正确列出, 状态切换可用
-- [ ] 全屏终端模态 (Workflow + Generic 共用)
-- [ ] **通用看板视图 (Terminal Kanban)**: 列增删 / 卡片拖拽 / 多选 / resize / 双击编辑 / Focus overlay 全部可用
-- [ ] 顶栏 Layout Toggle 切换 workflow ↔ generic, PTY 后台保活
-- [ ] `read_generic_board` / `write_generic_board` / `set_layout` / `get_layout` 跑通, 改动立刻原子写回 `.kanban-board.json`
-- [ ] **验收**: 在 generic 视图里建 5 张卡跑不同命令, 拖到 running 列自动 spawn; 切到 workflow 视图改 PRD 再切回 generic, 卡片状态保留
-
-### 里程碑 6 · 打磨 (M6, 2d)
-
-- [ ] 错误处理 (PTY 崩 / 文件读失败 / 权限问题) 全覆盖
-- [ ] Recent workspaces 记忆 (`get_recent_workspaces`)
-- [ ] 键盘快捷键: ⌘O 打开文件夹 / ⌘W 关闭 workspace
-- [ ] 三平台打包产物 (macOS `.dmg` / Windows `.msi` / Linux `.AppImage`)
-- [ ] **验收**: 可分发安装包, 三端启动正常
-
-### 非功能验收
-
-- [ ] **性能**: 1000 文件的 workspace 冷扫描 < 2s; 文件变化到 UI 更新 < 500ms
-- [ ] **内存**: 空闲 (含 10 个 PTY) < 200MB
-- [ ] **跨平台**: macOS 13+ / Windows 11 / Ubuntu 22.04 均能安装运行
-- [ ] **安全**: 所有写操作走 Rust 端 `canonicalize` + 根目录前缀校验; PTY 不继承 app 的 env (显式传 shell env)
-- [ ] **数据完整性**: 所有写入走原子操作, writer 崩溃不留半写文件
-- [ ] **可访问性**: 所有按钮可键盘聚焦, Tab 顺序合理; 终端遵守 xterm.js 默认 a11y
-
----
-
-## 不做的事 (v1 Out of scope)
-
-> 明确排除以免范围蔓延; 标 v2 的可能进下一个版本, 标「永不」的是方向性决策。
-
-- 命令面板 `⌘K` (v2)
-- 可追溯性悬停连线 (v2)
-- Rule 违规的真实静态代码扫描 (v2, 需要 AST 解析)
-- 多 workspace 并列标签页 (v2)
-- 浅色主题 (v2)
-- 应用级撤销 `⌘Z` (v2, MVP 依赖 git 做撤销)
-- git 内嵌 diff viewer (v2)
-- 通用看板的 `WIP limits` / Swimlane 嵌套 / 卡片自定义颜色 (v2)
-- 通用看板与 Workflow 视图之间的卡片互转 (v2, 模型不同)
-- 协作编辑 / 云同步 (永不做, 本工具是本地单机工具)
-
----
-
-## 附录 A · Workspace 数据模型 (TypeScript)
-
-```ts
-// src/workspace/types.ts
-
-export type WorkspaceState = 'empty' | 'scanning' | 'invalid' | 'ready';
-
-export interface Workspace {
-  rootPath: string;
-  commands: Command[];
-  agents: SubAgent[];
-  rules: Rule[];
-  hooks: Hook[];
-  prds: PRD[];
-  tasks: TaskManifest[];
-  bugReports: BugReport[];
-  retrospectives: Retrospective[];
-  staticDocs: StaticDoc[];
-  scanErrors: ScanError[];
-}
-
-export interface Command {
-  id: string;                  // 文件名去掉 .md
-  cmd: string;                 // 斜杠命令名, 默认 = id
-  filePath: string;            // 相对 rootPath
-  idx: number | null;
-  title: string;
-  desc: string;
-  inputs: string[];            // artifact 文件名
-  outputs: string[];
-  gate: string | null;         // 下游 gate 命令 id
-  helper: boolean;
-  body: string;                // 正文
-}
-
-export interface SubAgent {
-  id: string;
-  name: string;
-  desc: string;
-  filePath: string;
-  boundCommands: string[];     // frontmatter `bindTo`
-}
-
-export interface Rule {
-  id: string;
-  priority: 'P0' | 'P1' | 'P2';
-  title: string;
-  desc: string;
-  filePath: string;
-  lanes: string[];
-}
-
-export interface Hook {
-  id: string;
-  name: string;
-  trigger: 'pre' | 'post' | 'on-change';
-  boundCommands: string[];
-  filePath: string;
-}
-
-export interface PRD {
-  id: string;                  // 如 PRD-042
-  title: string;
-  status: 'draft' | 'active' | 'archived';
-  author: string;
-  updatedAt: string;
-  tbdCount: number;            // 正文 `[TBD]` 出现次数
-  summary: string;
-  anchors: { tasks: number; code: number; tests: number };
-  filePath: string;
-  body: string;
-}
-
-export interface TaskManifest {
-  prdRef: string;
-  filePath: string;
-  tasks: Task[];
-}
-
-export interface Task {
-  id: string;                  // T001 等
-  title: string;
-  status: 'pending' | 'in-progress' | 'done' | 'blocked';
-  prdRef: string;
-  rules: string[];
-  deps: string[];
-  lane: string;                // 默认 'code'
-}
-
-export interface BugReport {
-  id: string;                  // BUG-17
-  title: string;
-  priority: 'P0' | 'P1' | 'P2';
-  status: 'triage' | 'reproducing' | 'fixing' | 'fixed';
-  reporter: string;
-  createdAt: string;
-  filePath: string;
-}
-
-export interface Retrospective {
-  id: string;
-  date: string;
-  drift: number;
-  dead: number;
-  commits: number;
-  filePath: string;
-}
-
-export interface StaticDoc {
-  id: string;
-  file: string;                // WORKFLOW.md 等
-  desc: string;
-  filePath: string;
-  body: string;
-}
-
-export interface ScanError {
-  filePath: string;
-  reason: string;
-}
-
-export interface AgentCardState {
-  id: string;                  // 运行时生成
-  kind: 'main' | 'sub' | 'skill' | 'hook';
-  commandId: string;
-  laneId: string;
-  title: string;
-  status: 'idle' | 'run' | 'ok' | 'err';
-  ptyId: string | null;
-}
-
-// ─── 通用看板视图 (Terminal Kanban) ──────────────────
-// 与 Workflow 视图并存, 数据独立, 持久化到 .claude/.kanban-board.json
-
-export type Layout = 'workflow' | 'generic';
-
-export interface GenericBoard {
-  columns: GenericColumn[];
-  cards: GenericCard[];
-  version: 1;                  // schema 版本, 升级时迁移
-}
-
-export interface GenericColumn {
-  id: string;                  // backlog / ready / running / done / 用户自定义
-  title: string;
-  color: string;               // Design Token CSS 变量名 (如 'var(--blue)')
-}
-
-export interface GenericCard {
-  id: string;                  // nanoid(8)
-  col: string;                 // 命中 GenericColumn.id
-  title: string;
-  desc: string;
-  status: 'idle' | 'run' | 'ok' | 'err';
-  bootCommands: string[];      // 进入 'running' 列时按序 inject
-  size?: { w?: number; h?: number };
-  ptyId?: string | null;       // 后台保活的 PTY id (跨 layout 切换不丢)
-}
-
-export interface AppPersistentState {
-  layout: Layout;              // 上次选择的视图
-  recentWorkspaces: string[];  // 最近 5 个
-  tweaks: {
-    density: 'compact' | 'comfortable';
-    showHelperLanes: boolean;
-    showDescriptions: boolean;
-    columnWidth: 'narrow' | 'standard' | 'wide';
-    accent: 'green' | 'blue' | 'purple';
-    theme: 'dark' | 'light';
-  };
-}
-```
-
----
-
-## 附录 B · 技术栈与目录结构
-
-| 层         | 选型                                                  | 理由                                     |
-| ---------- | ----------------------------------------------------- | ---------------------------------------- |
-| 壳         | **Tauri 2.x**                                         | 体积小, Rust 后端, 内置 fs/shell/watcher |
-| 前端       | **React 18 + Vite + TypeScript**                      | 与现有设计稿一致                         |
-| 样式       | **CSS Modules + CSS 变量**                            | 设计稿全部用 CSS 变量定义主题            |
-| 终端渲染   | **xterm.js 5.x**                                      | 行业标准                                 |
-| PTY        | **`tauri-plugin-shell` + Rust 端 `portable-pty`**     | 跨平台真 PTY                             |
-| 文件监听   | **Rust 端 `notify` crate**                            | 通过 Tauri event 推到前端                |
-| 状态       | **Zustand**                                           | 轻量, 不引入 Redux                        |
-| Markdown   | **`react-markdown` + `remark-gfm`**                   | 渲染 PRD / 文档                          |
-| frontmatter | **前端 `gray-matter` + Rust 端 `serde_yaml`**         | 解析 YAML                                |
-
-**禁止**: Electron / Next.js / styled-components / Redux / MobX。
-
-```
-workflow-kanban/
-├─ src-tauri/                    # Rust 后端
-│  ├─ src/
-│  │  ├─ main.rs
-│  │  ├─ scanner.rs              # 扫描逻辑
-│  │  ├─ watcher.rs              # 文件变化监听
-│  │  └─ pty.rs                  # PTY 进程管理
-│  └─ tauri.conf.json
-├─ src/                          # React 前端
-│  ├─ app/
-│  │  ├─ App.tsx
-│  │  ├─ WorkspaceShell.tsx      # 4 种 state 壳
-│  │  └─ states/                 # Empty / Scanning / Invalid / Ready
-│  ├─ board/
-│  │  ├─ Board.tsx
-│  │  ├─ Lane.tsx
-│  │  ├─ AgentCard.tsx
-│  │  ├─ TaskRow.tsx
-│  │  ├─ Connector.tsx
-│  │  └─ PipelineStrip.tsx
-│  ├─ topbar/
-│  │  ├─ TopBar.tsx
-│  │  ├─ PRDSelector.tsx
-│  │  ├─ RulesButton.tsx
-│  │  └─ DocsButton.tsx
-│  ├─ drawers/
-│  │  ├─ RulesDrawer.tsx
-│  │  ├─ DocsViewer.tsx
-│  │  └─ PRDPreview.tsx
-│  ├─ retros/
-│  │  └─ RetroTimeline.tsx
-│  ├─ terminal/
-│  │  ├─ Terminal.tsx            # xterm.js 封装
-│  │  └─ useTerminal.ts
-│  ├─ workspace/
-│  │  ├─ useWorkspace.ts
-│  │  └─ types.ts
-│  ├─ store/
-│  │  └─ workspaceStore.ts       # Zustand
-│  └─ styles/
-│     └─ theme.css               # CSS 变量
-└─ package.json
-```
-
----
-
-## 附录 C · Tauri command 签名
-
-```rust
-// 工作区
-#[tauri::command] async fn pick_workspace_folder() -> Result<String, String>;
-#[tauri::command] async fn validate_workspace(path: String) -> ValidateResult;
-#[tauri::command] async fn scan_workspace(path: String) -> Workspace;
-#[tauri::command] async fn get_recent_workspaces() -> Vec<String>;
-
-// 监听
-#[tauri::command] async fn start_watcher(path: String) -> Result<(), String>;
-#[tauri::command] async fn stop_watcher() -> Result<(), String>;
-
-// PTY
-#[tauri::command] async fn pty_spawn(cwd: String, cols: u16, rows: u16) -> String;
-#[tauri::command] async fn pty_write(pty_id: String, data: String);
-#[tauri::command] async fn pty_resize(pty_id: String, cols: u16, rows: u16);
-#[tauri::command] async fn pty_kill(pty_id: String);
-
-// 读写
-#[tauri::command] async fn read_file_raw(path: String) -> Result<String, String>;
-#[tauri::command] async fn write_file(path: String, content: String) -> Result<(), String>;
-#[tauri::command] async fn create_file(path: String, template_id: Option<String>) -> Result<(), String>;
-#[tauri::command] async fn delete_file(path: String) -> Result<(), String>;
-#[tauri::command] async fn rename_file(from: String, to: String) -> Result<(), String>;
-#[tauri::command] async fn update_frontmatter(path: String, patch: serde_json::Value) -> Result<(), String>;
-#[tauri::command] async fn update_task_status(manifest_path: String, task_id: String, status: String) -> Result<(), String>;
-
-// 通用看板 / 持久化状态
-#[tauri::command] async fn read_generic_board(path: String) -> Result<GenericBoard, String>;
-#[tauri::command] async fn write_generic_board(path: String, board: GenericBoard) -> Result<(), String>;
-#[tauri::command] async fn get_layout() -> Layout;             // 'workflow' | 'generic'
-#[tauri::command] async fn set_layout(layout: Layout) -> Result<(), String>;
-#[tauri::command] async fn read_app_state() -> AppPersistentState;
-#[tauri::command] async fn write_app_state(patch: serde_json::Value) -> Result<(), String>;
-```
-
-**事件** (Rust → JS):
-
-```
-scan_progress      { currentFile: string, progress: number }
-workspace_changed  { kind: string, diff: { added, modified, deleted } }
-pty_output         { ptyId: string, data: string }
-pty_exit           { ptyId: string, code: number }
-```
-
----
-
-## 附录 D · frontmatter 最小 schema
-
-**`.claude/commands/*.md`**:
-
-```yaml
----
-id: prd                # 必填, 唯一
-idx: 1                 # 主 pipeline 排序; helper 则省略
-title: Requirements    # 必填
-desc: one-liner        # 必填
-inputs: []
-outputs: [PRD.md]
-gate: prd-check        # 可选
-helper: false          # 默认 false
----
-```
-
-**`.claude/agents/*.md`**:
-
-```yaml
----
-id: test-writer
-name: Test Writer
-desc: Writes vitest tests from @rules
-bindTo: [test]         # 支持多个命令绑定
----
-```
-
-**`.claude/rules/*.md`**:
-
-```yaml
----
-id: no-hardcode
-priority: P0           # P0 / P1 / P2
-title: 禁止硬编码
-lanes: [code, review]  # 在哪些命令里触发
----
-```
-
-**`.claude/hooks/*.md`**:
-
-```yaml
----
-id: check-hardcode
-name: Check Hardcode
-trigger: pre           # pre / post / on-change
-boundCommands: [code]
----
-```
-
-**`docs/prds/*.md`**:
-
-```yaml
----
-id: PRD-042
-status: active         # draft / active / archived
-author: Tommy
-updatedAt: 2026-04-24T10:00:00Z
----
-```
-
-**`docs/tasks/*.json`**:
-
-```json
-{
-  "prdRef": "PRD-042",
-  "tasks": [
-    {
-      "id": "T001",
-      "title": "userApi",
-      "status": "done",
-      "rules": ["no-hardcode"],
-      "deps": [],
-      "lane": "code"
-    }
-  ]
-}
-```
-
-**`docs/bug-reports/*.md`**:
-
-```yaml
----
-id: BUG-114
-title: race in useUserStore
-priority: P0
-status: fixing
-reporter: qa
-createdAt: 2026-04-22T08:30:00Z
----
-```
-
-**`docs/retrospectives/*.md`**:
-
-```yaml
----
-id: 2026-04-21-meta-audit
-date: 2026-04-21
-drift: 2
-dead: 0
-commits: 17
----
-```
-
----
-
-## 附录 E · 通用看板 schema
-
-**`.claude/.kanban-board.json`** (通用看板视图持久化文件, 由工具自动维护):
-
-```json
-{
-  "version": 1,
-  "columns": [
-    { "id": "backlog", "title": "Backlog", "color": "var(--text-3)" },
-    { "id": "ready",   "title": "Ready",   "color": "var(--blue)" },
-    { "id": "running", "title": "Running", "color": "var(--amber)" },
-    { "id": "done",    "title": "Done",    "color": "var(--green)" }
-  ],
-  "cards": [
-    {
-      "id": "c1",
-      "col": "backlog",
-      "title": "scrape-prices.py",
-      "desc": "Poll 3 marketplaces every 5 min and dedupe results.",
-      "status": "idle",
-      "bootCommands": ["ls", "cat README.md"],
-      "size": { "w": 320, "h": 220 }
-    }
-  ]
-}
-```
-
-**`<app-data-dir>/app_state.json`** (Tauri AppData 目录, 跨 workspace 共享):
-
-```json
-{
-  "layout": "workflow",
-  "recentWorkspaces": [
-    "/Users/tommy/code/claude-code-workflow",
-    "/Users/tommy/code/spider"
-  ],
-  "tweaks": {
-    "density": "comfortable",
-    "showHelperLanes": true,
-    "showDescriptions": true,
-    "columnWidth": "standard",
-    "accent": "green",
-    "theme": "dark"
-  }
-}
-```
-
-> 写入策略统一走 #文件系统集成 R1 (临时文件 + rename 原子写)。
-
----
+- [ ] 应用在 macOS 启动，有最近工作区时 3 秒内到达 ready 状态
+- [ ] 全部 20 个功能点可正常渲染，无白屏/控制台报错
+- [ ] Activity Bar 切换 6 个视图，对应内容区域正确显示
+- [ ] PTY 终端可正常 spawn / 接收输出 / 写入输入 / kill
+- [ ] Shell Panel ⌘` 开关，Board bottom 正确上移/复位
+- [ ] 命令面板 ⌘K 打开，键盘 ↑↓ 导航，Enter 执行
+- [ ] 卡片在同泳道内拖拽排序正确
+- [ ] 通用看板跨列拖拽，数据正确持久化到 .kanban-board.json
+- [ ] 通知抽屉未读数与铃铛徽章实时同步
+- [ ] Tweaks Panel 密度切换实时生效并持久化
+- [ ] 所有覆盖层（Shell/通知/命令面板/焦点/右键菜单）支持 Esc 关闭
+- [ ] 文件 Watcher 检测到变化后看板数据自动刷新
 
 ## 变更记录
 
-| 日期       | 变更内容                                                                                    | 变更人 |
-| ---------- | ------------------------------------------------------------------------------------------- | ------ |
-| 2026-04-24 | 初版: 从 Claude Design 输出 (`PRD.md` + `Workflow Kanban.html`) 重组, 按 `docs/prds/_template.md` 格式拆分为 13 个功能点并逐条标明可测业务规则 | Tommy  |
-| 2026-04-27 | 设计稿归档到 `docs/designs/claude-workflow-kanban/`, 路径全部改为仓库相对路径               | Tommy  |
-| 2026-04-28 | 同步 spider (2) 原型: 新增 #通用看板视图 (Terminal Kanban, Backlog/Ready/Running/Done 通用泳道); 顶栏新增 Layout Toggle (workflow ↔ generic 双视图共存); 工具面板分组扩展 (showDescriptions / columnWidth / accent); 持久化迁移到 Rust 端 `app_state.json` 与 workspace 内 `.claude/.kanban-board.json`, 不再写 localStorage; Tauri command 新增 `read_generic_board` / `write_generic_board` / `get_layout` / `set_layout` / `read_app_state` / `write_app_state`; 验收清单 M5 从 2d → 3d (总工期 17d → 18d); 数据模型补 `Layout` / `GenericBoard` / `GenericColumn` / `GenericCard` / `AppPersistentState` 类型; 新增附录 E 描述持久化文件 schema | Tommy  |
+| 日期 | 变更内容 | 变更人 |
+|------|---------|--------|
+| 2026-05-02 | 基于设计稿完整枚举 18 个 UI 元素（全部 v1），重新生成 | Claude |
+
+---
+
+## 附录 A: 文件目录约定
+
+| 路径 | 内容 |
+|------|------|
+| `.claude/commands/*.md` | 泳道来源，每个文件对应一条泳道 |
+| `.claude/rules/*.md` | 编码规则，Rules 抽屉内容 |
+| `.claude/.kanban-board.json` | 通用看板持久化数据 |
+| `docs/prds/*.md` | PRD 文件，PRD 选择器数据来源 |
+| `docs/tasks/*.json` | 任务清单，tasks 视图数据来源 |
+| `docs/bug-reports/*.md` | Bug 报告，bugs 视图数据来源 |
+| `docs/retrospectives/*.md` | /meta-audit 历史，RetroTimeline 数据来源 |
+
+## 附录 B: Design Token
+
+| Token | 值 | 用途 |
+|-------|----|------|
+| `--bg` | `#07080a` | 全局背景 |
+| `--bg-1` | `#0c0d10` | 面板背景（TopBar / Pipeline / Lane head）|
+| `--bg-2` | `#121418` | 卡片背景 |
+| `--bg-3` | `#171a1f` | 卡片头部 / 输入行背景 |
+| `--bg-4` | `#1d2128` | 步骤编号方块背景 |
+| `--line` | `#23262d` | 默认边框 |
+| `--line-2` | `#2d3139` | hover 边框 |
+| `--text` | `#e6e9ef` | 主文字 |
+| `--text-2` | `#a5acba` | 次要文字 |
+| `--text-3` | `#6b7280` | 辅助文字 / 占位 |
+| `--green` | `#6ee77f` | 主色调 / main kind / ok 状态 / 激活 |
+| `--amber` | `#ffb547` | 警告 / hook kind / run 状态 / Gate |
+| `--red` | `#ff6b6b` | 错误 / err 状态 / danger |
+| `--blue` | `#7aa2ff` | 蓝色 / wait 状态 / in artifact |
+| `--purple` | `#c39bff` | 紫色 / sub kind |
+| `--teal` | `#5eead4` | 青色 / skill kind / done 步骤 |
+| `--mono` | JetBrains Mono | 等宽字体（命令名/路径/终端） |
+| `--sans` | Inter | 正文字体 |
+
+## 附录 C: Tauri IPC 命令契约
+
+| 命令 | 方向 | 说明 |
+|------|------|------|
+| `pick_workspace_folder` | 前端→Rust | 打开系统目录选择器，返回路径或 null |
+| `scan_workspace` | 前端→Rust | 扫描工作区，返回 WorkspaceScanResult |
+| `get_recent_workspaces` | 前端→Rust | 读取最近工作区列表 |
+| `save_recent_workspaces` | 前端→Rust | 保存最近工作区列表 |
+| `watch_workspace` | 前端→Rust | 启动文件 watcher |
+| `workspace_changed` | Rust→前端（Event） | 文件变化通知 |
+| `pty_spawn` | 前端→Rust | 启动 PTY 会话 |
+| `pty_write` | 前端→Rust | 向 PTY 写入输入 |
+| `pty_resize` | 前端→Rust | 调整 PTY 窗口尺寸 |
+| `pty_kill` | 前端→Rust | 终止 PTY 进程 |
+| `pty_output` | Rust→前端（Event） | PTY 输出推送 |
+| `read_generic_board` | 前端→Rust | 读取通用看板数据 |
+| `write_generic_board` | 前端→Rust | 写入通用看板数据 |
+| `get_layout` | 前端→Rust | 读取布局设置 |
+| `set_layout` | 前端→Rust | 保存布局设置 |
+
+## 附录 D: 设计稿元素清单（v1 锁定，2026-05-02）
+
+| # | 元素 | 决策 | PRD 章节 |
+|---|------|------|---------|
+| 1 | Activity Bar | ✅ v1 | #Activity-Bar |
+| 2 | TopBar | ✅ v1 | #顶部操作栏 |
+| 3 | Pipeline Strip | ✅ v1 | #流水线步骤条 |
+| 4 | Board 主区域 | ✅ v1 | #看板主区域 |
+| 5 | Retro Timeline | ✅ v1 | #底部时间轴 |
+| 6 | Lane（泳道） | ✅ v1 | #泳道 |
+| 7 | Connector（箭头） | ✅ v1 | #泳道连接箭头 |
+| 8 | Agent Card | ✅ v1 | #Agent-卡片 |
+| 9 | Terminal（嵌入式） | ✅ v1 | #卡片内嵌终端 |
+| 10 | Shell Panel | ✅ v1 | #全局-Shell-面板 |
+| 11 | Notification Drawer | ✅ v1 | #通知抽屉 |
+| 12 | Command Palette | ✅ v1 | #命令面板 |
+| 13 | Focus Overlay | ✅ v1 | #卡片详情焦点视图 |
+| 14 | Rules Drawer | ✅ v1 | #规则抽屉 |
+| 15 | PRD Selector | ✅ v1 | #PRD-选择器 |
+| 16 | Docs Panel | ✅ v1 | #文档浏览器 |
+| 17 | Context Menu | ✅ v1 | #右键菜单 |
+| 18 | Tweaks Panel | ✅ v1 | #微调面板 |

@@ -1,12 +1,13 @@
 .board {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
+  position: absolute;
+  right: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 12px;
-  gap: 0;
-  background: var(--bg);
+  transition: bottom 200ms ease, top 200ms ease;
+  background:
+    radial-gradient(1400px 500px at 10% 0%, rgba(110, 231, 127, 0.04), transparent 60%),
+    radial-gradient(1200px 500px at 90% 100%, rgba(122, 162, 255, 0.04), transparent 60%),
+    var(--bg);
 }
 
 /* dark horizontal scrollbar */
@@ -25,6 +26,16 @@
 
 .board::-webkit-scrollbar-thumb:hover {
   background: var(--line-2);
+}
+
+.inner {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 100%;
+  min-width: max-content;
+  padding: 12px;
+  gap: 0;
 }
 
 .laneGroup {

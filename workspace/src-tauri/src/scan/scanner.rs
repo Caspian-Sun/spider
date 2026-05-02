@@ -127,7 +127,7 @@ async fn process_file(
             let fm: CommandFrontmatter = fm_str.as_deref().map(|s| try_parse_fm(s)).unwrap_or_default();
 
             let id     = fm.id.unwrap_or_else(|| stem.clone());
-            let helper = fm.helper.unwrap_or(false) || fm.idx.is_none();
+            let helper = fm.helper.unwrap_or(false);
             let title  = fm.title.unwrap_or_else(|| {
                 parser::extract_first_h1(&body).unwrap_or_else(|| id.clone())
             });

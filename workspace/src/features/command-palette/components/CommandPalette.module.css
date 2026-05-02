@@ -1,0 +1,130 @@
+.veil {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 300;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 96px;
+}
+
+.palette {
+  width: min(640px, 92vw);
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 120px);
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.searchIcon {
+  color: var(--text-3);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--text);
+  caret-color: var(--green);
+}
+
+.input::placeholder {
+  color: var(--text-3);
+}
+
+.results {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.groupTitle {
+  padding: 8px 14px 4px;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.resultItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 0.08s;
+  border-left: 2px solid transparent;
+}
+
+.resultItem:hover,
+.resultItem.highlighted {
+  background: var(--bg-3);
+  border-left-color: var(--green);
+}
+
+.resultIcon {
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.resultName {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resultDesc {
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.footer {
+  display: flex;
+  gap: 16px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.hint {
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+
+.hint kbd {
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-size: 9px;
+}

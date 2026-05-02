@@ -1,0 +1,668 @@
+{
+  "moduleName": "Claude Workflow Kanban",
+  "moduleCode": "claude-workflow-kanban",
+  "prdRef": "docs/prds/claude-workflow-kanban.md",
+  "summary": "基于完整设计稿重新规划：补全 Activity Bar、Shell Panel、命令面板、通知抽屉、卡片焦点视图、右键菜单等缺失功能，并增强现有 TopBar / AgentCard / Lane / Board / KanbanShell",
+  "createdAt": "2026-05-02",
+  "tasks": [
+    {
+      "taskId": "T001",
+      "type": "constants",
+      "name": "activity-bar constants",
+      "filePath": "workspace/src/features/activity-bar/constants.ts",
+      "description": "定义 Activity Bar 视图枚举（board/prd/tasks/bugs/docs/settings）及导航项配置（label、icon、disabled 条件）",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#Activity-Bar",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.activity-bar .ab-item)",
+      "businessRules": [
+        "顶部显示 λ logo（绿色，18px mono 字体，32×32px 区域），logo 下方依次排列 6 个导航按钮：看板（board）/ 需求（prd）/ 任务（tasks）/ 缺陷（bugs）/ 文档（docs）/ 设置（settings）",
+        "工作区未加载（empty / invalid 状态）时，除 settings 外其他按钮禁用，徽章不显示"
+      ],
+      "props": {},
+      "dependencies": [],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "ACTIVITY_VIEWS 数组包含 board/prd/tasks/bugs/docs/settings 共 6 项",
+        "每项含 id、label（中文）、disableWhenNoWorkspace 标志"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T002",
+      "type": "store",
+      "name": "useActivityBarStore",
+      "filePath": "workspace/src/features/activity-bar/stores/useActivityBarStore.ts",
+      "description": "管理 Activity Bar 当前激活视图（activeView: board/prd/tasks/bugs/docs/settings），提供 setView action",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#Activity-Bar",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (activeView state)",
+      "businessRules": [
+        "切换 activeView 时，主内容区域整体替换，TopBar / PipelineStrip / RetroTimeline 保持挂载不重渲",
+        "工作区未加载（empty / invalid 状态）时，除 settings 外其他按钮禁用，徽章不显示"
+      ],
+      "props": {},
+      "dependencies": [
+        "T001"
+      ],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "初始 activeView 为 'board'",
+        "setView('prd') 正确更新 activeView",
+        "store 可被 ActivityBar 和 KanbanShell 同时读取"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T003",
+      "type": "store",
+      "name": "useShellStore",
+      "filePath": "workspace/src/features/shell/stores/useShellStore.ts",
+      "description": "管理全局 Shell Panel 的开关状态、tab 列表（ShellTab[]）和当前激活 tab",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#全局-Shell-面板",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.shell-panel .shell-tab)",
+      "businessRules": [
+        "默认隐藏（transform: translateY(100%)），⌘`（反引号）切换显示/隐藏，TopBar >_Shell 按钮同等效果",
+        "Tab 栏高 32px，活跃 Tab 黑色背景 + 边框，Tab 有 × 关闭按钮",
+        "+ 按钮新建 tab，自动 spawn 新 PTY 会话（默认 shell，cwd = workspace rootPath）",
+        "Shell Panel 打开时，Board bottom 从 28px 增加到 268px，防止内容被遮挡",
+        "close 等同 ⌘`（关闭面板，不销毁 PTY）；maximize 将面板高度扩展至覆盖 Board"
+      ],
+      "props": {},
+      "dependencies": [],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "isOpen 默认 false，toggle() 正确切换",
+        "tabs 数组支持 addTab / closeTab / setActiveTab",
+        "activeTabId 跟踪当前 tab",
+        "ShellTab 含 { id, ptyId, title } 字段"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T004",
+      "type": "store",
+      "name": "useNotificationStore",
+      "filePath": "workspace/src/features/notifications/stores/useNotificationStore.ts",
+      "description": "管理全局通知列表（ok/err/warn/info 类型）和未读计数，提供 addNotification / markAllRead / closeDrawer",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通知抽屉",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.notif-drawer .notif-item)",
+      "businessRules": [
+        "通知类型：ok=绿色圆点 / err=红色圆点 / warn=琥珀色圆点 / info=灰色圆点",
+        "顶部有「Mark all as read」按钮，点击清空所有未读标记，铃铛徽章归零",
+        "无通知时显示空状态「No notifications」",
+        "点击通知项跳转到对应泳道并高亮相关卡片"
+      ],
+      "props": {},
+      "dependencies": [],
+      "reuseComponents": [],
+      "acceptanceCriteria": [
+        "notifications 数组，每项含 id/type/title/meta/read/laneId",
+        "unreadCount = notifications.filter(n => !n.read).length",
+        "markAllRead() 将所有 read 设为 true，unreadCount 归零",
+        "isDrawerOpen 控制抽屉显示/隐藏"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T005",
+      "type": "component",
+      "name": "ActivityBar",
+      "filePath": "workspace/src/features/activity-bar/components/ActivityBar.tsx",
+      "description": "左侧 48px 固定导航栏：λ logo + 6 个导航按钮（激活 2px 绿指示条）+ bugs 红色徽章 + settings 底部固定",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#Activity-Bar",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.activity-bar .ab-logo .ab-item .ab-spacer)",
+      "businessRules": [
+        "Activity Bar 固定在屏幕最左侧，宽 48px，高度占满全屏，不随内容滚动，z-index: 95",
+        "顶部显示 λ logo（绿色，18px mono 字体，32×32px 区域），logo 下方依次排列 6 个导航按钮：看板（board）/ 需求（prd）/ 任务（tasks）/ 缺陷（bugs）/ 文档（docs）/ 设置（settings）",
+        "激活按钮左侧显示 2px 绿色指示条（::before 伪元素，left: -10px），文字变为 var(--text)",
+        "未激活按钮颜色为 var(--text-3)，hover 时变为 var(--text) 并显示 var(--bg-2) 背景，圆角 4px",
+        "缺陷（bugs）图标显示当前未修复 bug 数量的红色数字徽章（右上角 14×14px 圆形）",
+        "设置（settings）按钮固定在 Activity Bar 底部（.ab-spacer 弹性间隔），其余按钮在顶部",
+        "工作区未加载（empty / invalid 状态）时，除 settings 外其他按钮禁用，徽章不显示",
+        "切换 activeView 时，主内容区域整体替换，TopBar / PipelineStrip / RetroTimeline 保持挂载不重渲"
+      ],
+      "props": {
+        "ActivityBarProps": "无外部 props，全部从 store 读取"
+      },
+      "dependencies": [
+        "T001",
+        "T002"
+      ],
+      "reuseComponents": [
+        "useActivityBarStore",
+        "useWorkspaceStore"
+      ],
+      "acceptanceCriteria": [
+        "position: fixed; left: 0; top: 0; width: 48px; height: 100vh; z-index: 95",
+        "λ logo 在顶部，绿色 mono 字体",
+        "激活状态有 2px 左侧绿色指示条",
+        "bugs 按钮有红色徽章（仅 workspace loaded 时显示）",
+        "settings 按钮在底部，.ab-spacer 撑开",
+        "workspace 未加载时非 settings 按钮 disabled"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T006",
+      "type": "component",
+      "name": "ShellPanel",
+      "filePath": "workspace/src/features/shell/components/ShellPanel.tsx",
+      "description": "全局底部终端面板：tab 管理 + PTY 会话 + 220ms 滑入动画 + minimize/maximize/close 按钮",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#全局-Shell-面板",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.shell-panel .shell-tabs .shell-tab)",
+      "businessRules": [
+        "Shell Panel 固定定位：left: 48px; right: 0; bottom: 28px; height: 240px",
+        "默认隐藏（transform: translateY(100%)），⌘`（反引号）切换显示/隐藏，TopBar >_Shell 按钮同等效果",
+        "显示/隐藏动画：220ms cubic-bezier(0.32, 0.72, 0, 1)",
+        "Shell Panel 打开时，Board bottom 从 28px 增加到 268px，防止内容被遮挡",
+        "Tab 栏高 32px，活跃 Tab 黑色背景 + 边框，Tab 有 × 关闭按钮",
+        "+ 按钮新建 tab，自动 spawn 新 PTY 会话（默认 shell，cwd = workspace rootPath）",
+        "头部右侧有 minimize / maximize / close 三个操作按钮",
+        "close 等同 ⌘`（关闭面板，不销毁 PTY）；maximize 将面板高度扩展至覆盖 Board",
+        "面板内终端规则同 #卡片内嵌终端"
+      ],
+      "props": {
+        "ShellPanelProps": "无外部 props，全部从 useShellStore 读取"
+      },
+      "dependencies": [
+        "T003"
+      ],
+      "reuseComponents": [
+        "Terminal",
+        "usePtySession",
+        "useShellStore",
+        "useWorkspaceStore"
+      ],
+      "acceptanceCriteria": [
+        "position: fixed; left: 48px; right: 0; bottom: 28px; height: 240px",
+        "隐藏时 transform: translateY(100%)，220ms 动画",
+        "⌘` 触发 toggle",
+        "tab + 按钮新增 tab 并 spawn PTY",
+        "× 按钮关闭 tab",
+        "close 按钮隐藏面板不销毁 PTY",
+        "maximize 面板高度覆盖 Board"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T007",
+      "type": "component",
+      "name": "NotificationDrawer",
+      "filePath": "workspace/src/features/notifications/components/NotificationDrawer.tsx",
+      "description": "通知抽屉：类型圆点 + 未读高亮 + Mark all as read + 空状态 + 点击跳转泳道 + 点击外侧关闭",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通知抽屉",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.notif-drawer .notif-item .notif-dot)",
+      "businessRules": [
+        "通知抽屉由 TopBar 铃铛按钮触发，position: fixed; top: 50px; right: 12px; width: 360px，最大高度 calc(100vh - 80px)",
+        "通知类型：ok=绿色圆点 / err=红色圆点 / warn=琥珀色圆点 / info=灰色圆点",
+        "未读通知背景 rgba(110,231,127,0.04)，已读无特殊背景",
+        "每条通知：类型圆点 + 标题（11.5px）+ meta 信息（时间/来源，10.5px 灰色）",
+        "顶部有「Mark all as read」按钮，点击清空所有未读标记，铃铛徽章归零",
+        "无通知时显示空状态「No notifications」",
+        "点击通知项跳转到对应泳道并高亮相关卡片",
+        "点击抽屉外侧区域关闭抽屉"
+      ],
+      "props": {
+        "NotificationDrawerProps": "无外部 props，从 useNotificationStore 读取"
+      },
+      "dependencies": [
+        "T004"
+      ],
+      "reuseComponents": [
+        "useNotificationStore",
+        "useKanbanStore"
+      ],
+      "acceptanceCriteria": [
+        "position: fixed; top: 50px; right: 12px; width: 360px",
+        "未读通知有 rgba(110,231,127,0.04) 背景",
+        "Mark all as read 点击后 unreadCount 归零",
+        "无通知时显示 No notifications",
+        "点击抽屉外侧关闭（useEffect + pointerdown 监听）"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T008",
+      "type": "component",
+      "name": "CommandPalette",
+      "filePath": "workspace/src/features/command-palette/components/CommandPalette.tsx",
+      "description": "⌘K 命令面板：全屏遮罩 + 分组结果（Commands/PRDs/Tasks/Files）+ 键盘 ↑↓ 导航 + Enter 执行 + 空搜索时显示最近使用",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#命令面板",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.cmdk-veil .cmdk .cmdk-input .cmdk-result)",
+      "businessRules": [
+        "⌘K 或 TopBar ⌘K 按钮打开命令面板，Esc 关闭",
+        "遮罩：rgba(0,0,0,0.55) + backdrop-filter: blur(2px) 全屏覆盖",
+        "面板宽 min(640px, 92vw)，从屏幕上方 96px 处水平居中显示，border-radius 8px",
+        "顶部搜索输入框（14px mono），打开时自动获焦，placeholder 文字灰色",
+        "结果按组显示（Commands / PRDs / Tasks / Files），每组有灰色大写组标题",
+        "每条结果：图标（16px）+ 名称 + 右侧描述（10.5px 灰色）",
+        "键盘 ↑↓ 导航；激活行：左侧 2px 绿色边框 + var(--bg-3) 背景",
+        "Enter 执行选中条目（运行命令 / 打开文件 / 跳转泳道）",
+        "面板底部显示键盘快捷键提示：↑↓ 导航 / ↵ 执行 / Esc 关闭",
+        "搜索内容为空时，显示最近使用记录"
+      ],
+      "props": {
+        "CommandPaletteProps": "isOpen: boolean; onClose: () => void"
+      },
+      "dependencies": [],
+      "reuseComponents": [
+        "useWorkspaceStore"
+      ],
+      "acceptanceCriteria": [
+        "⌘K 打开，Esc 关闭",
+        "打开时搜索框自动 focus",
+        "键盘 ↑↓ 移动高亮行，Enter 执行",
+        "结果分 Commands/PRDs/Tasks/Files 4 组",
+        "激活行有 2px 左侧绿色边框",
+        "空搜索时显示最近使用",
+        "底部显示快捷键提示"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T009",
+      "type": "component",
+      "name": "AgentCardFocusView",
+      "filePath": "workspace/src/features/kanban/components/AgentCardFocusView.tsx",
+      "description": "卡片详情焦点视图：全屏遮罩（blur 3px）+ 900×620 窗口 + 共享 PTY 会话 + Esc/点击遮罩关闭",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#卡片详情焦点视图",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.focus-veil .focus-box)",
+      "businessRules": [
+        "点击卡片（非交通灯/按钮区域）打开焦点视图",
+        "遮罩：rgba(0,0,0,0.65) + backdrop-filter: blur(3px) 全屏覆盖，z-index: 150",
+        "焦点窗口尺寸：min(900px, 90vw) × min(620px, 85vh)，居中，border-radius 8px",
+        "焦点窗口显示完整 Agent 卡片内容：头部 + 描述 + 全高度终端（无 max-height 限制）",
+        "Esc 或点击遮罩关闭焦点视图",
+        "焦点视图与卡片共享同一 PTY 会话（不重新 spawn），关闭后 PTY 继续运行"
+      ],
+      "props": {
+        "AgentCardFocusViewProps": "card: AgentCardState; onClose: () => void"
+      },
+      "dependencies": [],
+      "reuseComponents": [
+        "Terminal",
+        "usePtySession"
+      ],
+      "acceptanceCriteria": [
+        "遮罩 z-index: 150，rgba(0,0,0,0.65) + backdrop-filter: blur(3px)",
+        "窗口 min(900px,90vw) × min(620px,85vh)，居中",
+        "Esc 关闭",
+        "点击遮罩关闭",
+        "终端无 max-height 限制",
+        "复用卡片已有 ptyId，不重新 spawn"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T010",
+      "type": "component",
+      "name": "CardContextMenu",
+      "filePath": "workspace/src/features/kanban/components/CardContextMenu.tsx",
+      "description": "右键上下文菜单：Run/Pause/Restart/Duplicate/Move to/Delete，Delete 有 danger 样式 + 二次确认，超出视口自动翻转",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#右键菜单",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.ctx .ctx-item .ctx-sep)",
+      "businessRules": [
+        "右键点击 Agent 卡片弹出上下文菜单，定位在鼠标位置，超出视口时自动翻转方向",
+        "菜单项顺序：Run / Pause / Restart / 分割线 / Duplicate / Move to…（子菜单列出其他泳道）/ 分割线 / Delete",
+        "Delete 为 danger 样式，hover 时文字变 var(--red)",
+        "Delete 点击弹二次确认；确认后销毁卡片及其 PTY 会话",
+        "卡片处于 run 状态时，Run 禁用；idle 状态时，Pause / Restart 禁用",
+        "点击菜单外侧或 Esc 关闭菜单，不执行任何操作"
+      ],
+      "props": {
+        "CardContextMenuProps": "card: AgentCardState; x: number; y: number; onClose: () => void"
+      },
+      "dependencies": [],
+      "reuseComponents": [
+        "useKanbanStore",
+        "useWorkspaceStore"
+      ],
+      "acceptanceCriteria": [
+        "菜单出现在 (x, y) 位置",
+        "超出视口时向上/向左翻转",
+        "Delete 有 var(--red) hover 色",
+        "Delete 点击出现二次确认",
+        "run 状态 Run 禁用，idle 状态 Pause/Restart 禁用",
+        "Esc 或点击外侧关闭"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T011",
+      "type": "component",
+      "name": "TopBar（增强）",
+      "filePath": "workspace/src/features/topbar/components/TopBar.tsx",
+      "description": "增强现有 TopBar：补全 padding-left 64px、中区统计 chips（cmds/tasks/文件/tests/running）、右区全部按钮（Rules+徽章/Docs/🔔+徽章/⌘K/Shell/Reset/RunPipeline）",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#顶部操作栏",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.topbar .tbar-left .tbar-center .tbar-right .tbar-btn .run-btn)",
+      "businessRules": [
+        "TopBar 固定高度 46px，吸顶，z-index: 40，不随看板横向滚动",
+        "padding-left 64px（Activity Bar 48px + 留白 16px），为侧边栏留出空间",
+        "左区：λ logo（20×20px，绿→青 135° 渐变，border-radius 4px，内显示「λ」黑色加粗）+ 品牌文字「CLAUDE CODE WORKFLOW」（mono 加粗 12.5px）+ 路径 chip + PRD 选择器",
+        "路径 chip 显示 rootPath 最后两段，格式「…/parent/dir」，悬停 tooltip 显示完整路径，font-family mono",
+        "中区统计 chip 列表（mono 11px）：cmds 数 / tasks 数 / 文件数 / 测试数 / running 数",
+        "右区从左到右：Rules 按钮（含违规数红色徽章）→ Docs 按钮 → 🔔 铃铛（含未读数红色徽章）→ ⌘K 按钮 → >_Shell 按钮 → Reset 按钮 → Run pipeline 绿色主按钮",
+        "Run pipeline：background: rgba(110,231,127,0.08); border-color: rgba(110,231,127,0.3); color: var(--green)，触发完整流水线执行前弹确认框",
+        "Rules 按钮违规数为 0 时不显示徽章；🔔 未读数为 0 时不显示徽章",
+        "Reset 点击：关闭工作区，返回 empty 状态，保留最近记录",
+        "工作区未加载时：路径 chip 隐藏，中区 + 右区操作按钮全部禁用"
+      ],
+      "props": {},
+      "dependencies": [
+        "T003",
+        "T004"
+      ],
+      "reuseComponents": [
+        "PRDSelector",
+        "LayoutToggle",
+        "useWorkspaceStore",
+        "useDrawerStore",
+        "useShellStore",
+        "useNotificationStore"
+      ],
+      "acceptanceCriteria": [
+        "高度 46px，padding-left 64px",
+        "左区 λ logo + 路径 chip（最后两段）+ PRD 选择器",
+        "中区 5 个统计 chip（cmds/tasks/文件/tests/running）",
+        "右区 7 个按钮，从左到右顺序正确",
+        "铃铛徽章 unreadCount > 0 时显示",
+        "Rules 徽章违规 > 0 时显示",
+        "未加载时右区按钮 disabled",
+        "Run pipeline 有确认框"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T012",
+      "type": "component",
+      "name": "AgentCard（增强）",
+      "filePath": "workspace/src/features/kanban/components/AgentCard.tsx",
+      "description": "增强现有 AgentCard：补全 kind 彩色 3px 左边框、traffic light 按钮（红/黄/绿）、wait 状态、run 脉冲动画、idle 占位提示、collapsed/pinned 状态、右键菜单触发、点击触发焦点视图",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#Agent-卡片",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.agent .agent-head .traffic .kind-tag .status-badge)",
+      "businessRules": [
+        "卡片左侧 3px 实色边框区分 kind：main=var(--green)、sub=var(--purple)、skill=var(--teal)、hook=var(--amber)",
+        "卡片头部（.agent-head）背景 var(--bg-3)，cursor: grab，包含：macOS 交通灯（红/黄/绿各 9px 圆）+ 标题（mono 11.5px）+ kind 标签 + 状态徽章 + 菜单按钮（···）",
+        "Kind 标签样式（均大写）：main=绿色背景、sub=紫色背景、skill=青色背景、hook=琥珀色背景",
+        "状态徽章值及颜色（均大写）：idle=灰色 / run=琥珀色 / ok=绿色 / err=红色 / wait=蓝色",
+        "run 状态时，状态徽章应有闪烁/脉冲动画",
+        "卡片 idle 状态时，终端区域显示「点击运行 /<cmd>」占位提示，居中，可点击触发 spawn",
+        "交通灯功能：红=Kill Agent / 黄=Pause 或 Resume / 绿=Restart",
+        "点击卡片（非交通灯/按钮区域）时打开焦点视图（#卡片详情焦点视图）",
+        "右键卡片弹出右键菜单（#右键菜单）",
+        "卡片可在同一泳道内拖拽排序，拖拽中 opacity 0.45",
+        "选中（activeCard）：border-color: rgba(110,231,127,0.5); box-shadow: 0 0 0 1px rgba(110,231,127,0.3), 0 6px 22px rgba(0,0,0,0.45)",
+        "折叠状态（collapsed）：隐藏描述文字和终端区域，只显示头部",
+        "Pinned 卡片不可被拖拽，头部显示 🔒 图标"
+      ],
+      "props": {
+        "AgentCardProps": "card: AgentCardState; cwd?: string; onOpenFocus?: (card: AgentCardState) => void"
+      },
+      "dependencies": [
+        "T009",
+        "T010"
+      ],
+      "reuseComponents": [
+        "Terminal",
+        "usePtySession",
+        "useKanbanStore",
+        "CardContextMenu",
+        "AgentCardFocusView"
+      ],
+      "acceptanceCriteria": [
+        "左侧 3px 彩色边框，颜色与 kind 一致",
+        "头部含 traffic light（红9px/黄9px/绿9px），cursor: grab",
+        "run 状态徽章有 CSS 脉冲动画",
+        "idle 时终端区显示占位文字",
+        "右键触发 CardContextMenu",
+        "左键（非按钮区）触发 AgentCardFocusView",
+        "折叠时隐藏终端和描述",
+        "pinned 显示 🔒 且不可拖拽"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T013",
+      "type": "component",
+      "name": "Lane（增强）",
+      "filePath": "workspace/src/features/kanban/components/Lane.tsx",
+      "description": "增强现有 Lane：补全 lane-foot（+ add sub-agent 虚线按钮）、分区标签（MAIN/SUB-AGENTS/SKILLS/LOGS 彩色点）、in/out artifact tags（蓝/绿）、drag-over 绿色内阴影、空泳道提示",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#泳道",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.lane .lane-head .lane-body .lane-foot .lane-section-label .artifact-tag)",
+      "businessRules": [
+        "标准泳道 flex-basis 360px，Helper 泳道 flex-basis 320px（虚线边框 border-style: dashed）",
+        "泳道头部（.lane-head）背景 var(--bg-2)，底部边框分隔，包含两行：第一行：步骤编号方块（22×22px）+ 命令名（/ 号绿色，13px 加粗）+ 卡片计数气泡 + 弹性空白 + GATE 徽章（有门禁时显示，琥珀色）；第二行：描述文字（11px，var(--text-3)）+ 产出物标签（in=蓝色；out=绿色）",
+        "产出物标签（.artifact-tag）：mono 9.5px，圆角 10px；in 类型蓝色边框蓝色文字；out 类型绿色边框绿色文字",
+        "泳道主体（.lane-body）纵向滚动，padding 12px，gap 10px",
+        "分区标签（.lane-section-label）：UPPER_CASE，前有 4×4px 圆点，颜色：MAIN=绿、SUB-AGENTS=紫、SKILLS=青、LOGS=琥珀",
+        "泳道主体为拖拽放置目标，drag-over 时显示绿色内阴影：box-shadow: inset 0 0 0 1px rgba(110,231,127,0.25)",
+        "泳道底部（.lane-foot）有「+ add sub-agent」虚线按钮，hover 时文字变绿、边框绿色",
+        "泳道无卡片时，主体显示「空泳道」提示文字，居中，var(--text-3)"
+      ],
+      "props": {
+        "LaneProps": "command: Command（已有）"
+      },
+      "dependencies": [
+        "T012"
+      ],
+      "reuseComponents": [
+        "AgentCard",
+        "useKanbanStore"
+      ],
+      "acceptanceCriteria": [
+        "头部第二行有 in/out artifact tags（颜色正确）",
+        "GATE 徽章（有 gate 时）琥珀色显示",
+        "分区标签 MAIN/SUB-AGENTS/SKILLS/LOGS 各色彩色圆点",
+        "drag-over 时 box-shadow inset 绿色",
+        "lane-foot 有「+ add sub-agent」虚线按钮",
+        "无卡片时显示空状态提示"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T014",
+      "type": "component",
+      "name": "Board（增强）",
+      "filePath": "workspace/src/features/kanban/components/Board.tsx",
+      "description": "增强现有 Board：改用 position:absolute inset 布局（84px 0 28px 48px）、Shell 打开时 bottom 切换 268px（200ms 过渡）、双径向渐变背景、自定义 10px 滚动条",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#看板主区域",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.board .board-inner)",
+      "businessRules": [
+        "Board 使用 position: absolute; inset: 84px 0 28px 48px（top = TopBar 46px + Pipeline 38px = 84px；bottom = RetroTimeline 28px；left = Activity Bar 48px）",
+        "横向滚动（overflow-x: auto），纵向不滚动（overflow-y: hidden）",
+        "背景叠加两个径向渐变：左上角绿色光晕（radial-gradient(1400px 500px at 10% 0%, rgba(110,231,127,0.04), transparent 60%)）+ 右下角蓝色光晕（radial-gradient(1200px 500px at 90% 100%, rgba(122,162,255,0.04), transparent 60%)）",
+        "Shell Panel 打开时，bottom 从 28px 切换为 268px（Shell 240px + RetroTimeline 28px），过渡动画 transition: bottom 200ms ease",
+        "横向滚动条高度 10px，拇指色 var(--line)，hover 时 var(--line-2)",
+        "内部 .board-inner 为 flex row，高度 100%，align-items: stretch，min-width: max-content"
+      ],
+      "props": {
+        "BoardProps": "showPipeline?: boolean（已有）"
+      },
+      "dependencies": [
+        "T003",
+        "T013"
+      ],
+      "reuseComponents": [
+        "Lane",
+        "Connector",
+        "useShellStore"
+      ],
+      "acceptanceCriteria": [
+        "position: absolute; inset: 84px 0 28px 48px",
+        "Shell 打开时 bottom: 268px，有 200ms ease 过渡",
+        "背景有双径向渐变光晕",
+        "水平滚动条 10px 高，暗色拇指"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T015",
+      "type": "component",
+      "name": "PipelineStrip（增强）",
+      "filePath": "workspace/src/features/kanban/components/PipelineStrip.tsx",
+      "description": "增强现有 PipelineStrip：补全激活（绿框+绿背景）/ 完成（青色数字方块）步骤样式、GATE 标记（琥珀色虚线）、helpers 区（/fix + /meta-audit）、点击步骤滚动泳道",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#流水线步骤条",
+      "designRef": "docs/designs/claude-workflow-kanban/Workflow Kanban.html (.pipeline .pipe-step .pipe-gate .pipe-helpers)",
+      "businessRules": [
+        "Pipeline Strip 固定高度 38px，位于 TopBar 正下方，padding-left 64px 与 TopBar 对齐",
+        "步骤顺序固定：1 /prd → 2 /plan → 3 /code → 4 /test → 5 /review → 6 /build → 7 /deploy → 8 /release",
+        "每个步骤显示：数字编号方块（16×16px，border-radius 3px）+ 命令名，整体 border-radius 4px 的圆角按钮",
+        "激活步骤：绿色边框（rgba(110,231,127,0.4)）+ 绿色背景（rgba(110,231,127,0.06)）+ 数字方块绿底黑字",
+        "已完成步骤：数字方块青色底（var(--teal)）黑字加粗",
+        "步骤间箭头（→）用 var(--line-2) 颜色显示，不可点击",
+        "prd→plan 之间、plan→code 之间各有一个 GATE 标记（琥珀色虚线边框，显示门禁命令名如「◆ PRD-CHECK」）",
+        "步骤条右侧显示「helpers:」标签 + /fix 链接 + /meta-audit 链接（无编号方块，样式更轻）",
+        "点击步骤将对应泳道滚动到视口内并设为 activeStep",
+        "Layout 切换为 generic（通用看板）时，Pipeline Strip 整体隐藏"
+      ],
+      "props": {},
+      "dependencies": [],
+      "reuseComponents": [
+        "useWorkspaceStore",
+        "useLayoutStore"
+      ],
+      "acceptanceCriteria": [
+        "高度 38px，padding-left 64px",
+        "激活步骤绿色边框 + 绿色背景",
+        "完成步骤青色数字方块",
+        "GATE 标记（◆ PRD-CHECK / ◆ PLAN-CHECK）琥珀色虚线边框",
+        "右侧 helpers 区显示 /fix 和 /meta-audit",
+        "点击步骤触发对应泳道滚动",
+        "generic 模式时 display: none"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T016",
+      "type": "component",
+      "name": "RetroTimeline（增强）",
+      "filePath": "workspace/src/features/retro/components/RetroTimeline.tsx",
+      "description": "增强现有 RetroTimeline：补全 ws 状态指示灯（Ready/Empty/Scanning/Invalid）、drift 颜色等级（0=绿/1-2=琥珀/3+=红）、展开历史列表（0.15s 动画）、展开时键盘左右导航、收起右侧 Shell tab 行",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#底部时间轴",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (RetroTimeline 组件)",
+      "businessRules": [
+        "Retro Timeline 固定在屏幕最底部，默认高度 28px；点击后展开至 120px 显示完整历史",
+        "展开/收起有高度过渡动画（0.15s ease）",
+        "收起状态左侧显示：ws 状态指示灯（Ready=绿实心 / Empty=灰空心 / Scanning=琥珀闪烁 / Invalid=红实心）+ 最近一次 drift 数",
+        "收起状态右侧显示：Shell Panel 终端 tab 行（tab 可点击切换，× 可关闭）",
+        "展开状态显示历史列表：每项显示日期 + drift 数 + dead 引用数 + commits 数",
+        "drift 颜色：0 = var(--green) / 1-2 = var(--amber) / 3+ = var(--red)",
+        "展开时，键盘左右方向键在历史记录间导航，高亮当前选中时间点"
+      ],
+      "props": {},
+      "dependencies": [
+        "T003"
+      ],
+      "reuseComponents": [
+        "useWorkspaceStore",
+        "useShellStore"
+      ],
+      "acceptanceCriteria": [
+        "默认高度 28px，展开至 120px，0.15s ease 过渡",
+        "左侧指示灯 Ready=绿实心，Empty=灰空心，Scanning=琥珀闪烁，Invalid=红实心",
+        "drift 0=绿，1-2=琥珀，3+=红",
+        "收起右侧显示 Shell tab 行",
+        "展开时键盘 ← → 导航历史记录"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T017",
+      "type": "component",
+      "name": "GenericBoard",
+      "filePath": "workspace/src/features/generic-board/components/GenericBoard.tsx",
+      "description": "完整实现通用看板：4 默认列（Backlog/Ready/Running/Done）、双击重命名、列宽三档、删除含卡片列有确认、跨列拖拽、200ms debounce 持久化",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#通用看板",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (GenericBoard 组件)",
+      "businessRules": [
+        "通过 TopBar Layout Toggle 切换到 generic 模式，PipelineStrip 隐藏，Board 切换为通用看板",
+        "通用看板数据持久化到工作区 .claude/.kanban-board.json",
+        "默认 4 列：Backlog / Ready / Running / Done",
+        "列可重命名（双击列标题内联编辑），按 Enter 或失焦提交，Esc 恢复原标题",
+        "列标题提交为空时，显示「Title cannot be empty」错误，不提交更改",
+        "列宽三档：narrow（240px）/ standard（320px）/ wide（440px），列头部下拉选择",
+        "删除含卡片的列时，弹确认框「Delete N cards or move them to backlog?」",
+        "卡片可跨列拖拽（HTML5 DnD），drag-over 时列显示绿色内阴影",
+        "卡片移入 running 列时，如有 bootCommands，自动依次执行",
+        "状态变更 200ms debounce 后持久化到 .kanban-board.json",
+        ".kanban-board.json 不存在时，自动创建 4 列默认结构并写入文件"
+      ],
+      "props": {},
+      "dependencies": [],
+      "reuseComponents": [
+        "GenericColumn",
+        "useGenericBoardStore"
+      ],
+      "acceptanceCriteria": [
+        "默认 4 列 Backlog/Ready/Running/Done",
+        "双击列标题内联编辑，Enter/失焦提交，Esc 恢复",
+        "空标题提交时显示错误提示",
+        "列宽 narrow(240)/standard(320)/wide(440) 三档",
+        "删除含卡片的列出现确认框",
+        "跨列 HTML5 DnD 拖拽正确",
+        "200ms debounce 后持久化"
+      ],
+      "status": "done"
+    },
+    {
+      "taskId": "T018",
+      "type": "page",
+      "name": "KanbanShell（增强）",
+      "filePath": "workspace/src/pages/KanbanShell.tsx",
+      "description": "增强 KanbanShell：集成 ActivityBar（左 48px）、ShellPanel（底部）、NotificationDrawer、CommandPalette、处理 ⌘`/⌘K 全局快捷键，根据 activeView 切换主内容区域（Board/PRDPreview/BugList/DocsViewer），TopBar/PipelineStrip/RetroTimeline 始终挂载",
+      "prdRef": "docs/prds/claude-workflow-kanban.md#Activity-Bar",
+      "designRef": "docs/designs/claude-workflow-kanban/wf-app.jsx (App 根组件结构)",
+      "businessRules": [
+        "Activity Bar 固定在屏幕最左侧，宽 48px，高度占满全屏，不随内容滚动，z-index: 95",
+        "切换 activeView 时，主内容区域整体替换，TopBar / PipelineStrip / RetroTimeline 保持挂载不重渲",
+        "默认隐藏（transform: translateY(100%)），⌘`（反引号）切换显示/隐藏，TopBar >_Shell 按钮同等效果",
+        "⌘K 或 TopBar ⌘K 按钮打开命令面板，Esc 关闭",
+        "Shell Panel 打开时，Board bottom 从 28px 增加到 268px，防止内容被遮挡",
+        "Layout 切换为 generic（通用看板）时，Pipeline Strip 整体隐藏"
+      ],
+      "props": {},
+      "dependencies": [
+        "T005",
+        "T006",
+        "T007",
+        "T008",
+        "T011",
+        "T014",
+        "T015",
+        "T016",
+        "T017"
+      ],
+      "reuseComponents": [
+        "ActivityBar",
+        "TopBar",
+        "PipelineStrip",
+        "Board",
+        "GenericBoard",
+        "ShellPanel",
+        "NotificationDrawer",
+        "CommandPalette",
+        "TweaksPanel",
+        "RetroTimeline",
+        "RulesDrawer",
+        "DocsViewer",
+        "PRDPreview",
+        "BugList"
+      ],
+      "acceptanceCriteria": [
+        "ActivityBar 在最左侧 48px fixed",
+        "TopBar 46px 吸顶，padding-left 64px",
+        "PipelineStrip 38px 位于 TopBar 正下方",
+        "Board position: absolute; inset: 84px 0 28px 48px",
+        "ShellPanel 底部 240px，⌘` 切换，Board bottom 跟随变化",
+        "RetroTimeline 28px 吸底",
+        "CommandPalette ⌘K 打开，Esc 关闭",
+        "activeView 切换：board=Board, prd=PRDPreview, tasks=BugList, bugs=BugList, docs=DocsViewer",
+        "⌘K / ⌘` 全局快捷键注册在 window 上不重复注册"
+      ],
+      "status": "done"
+    }
+  ],
+  "routeConfig": {
+    "path": "N/A",
+    "layout": "单页 Tauri 桌面应用，无路由概念；主界面 = KanbanShell，抽屉/模态承担子页面职责"
+  },
+  "dataFlow": "Rust 扫描工作区 → useWorkspaceStore → KanbanShell 分发给 ActivityBar（视图切换）+ TopBar（操作 + 徽章）+ Board（泳道 + AgentCard + PTY）+ ShellPanel（全局 PTY）→ NotificationStore / ShellStore 作为跨组件共享状态 → CommandPalette / NotificationDrawer 作为全局覆盖层渲染在 KanbanShell 顶层"
+}
