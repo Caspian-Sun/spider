@@ -12,6 +12,7 @@ allowed-tools: Read, Write, Bash
 
 | 参数类型 | 说明 | 示例 |
 |---------|------|------|
+| 效果图截图 | `@路径/设计稿.png` 或 `.jpg`（Claude 多模态直接识别） | `@docs/designs/screenshots/reference/xiaoguotu.png` |
 | 设计稿文件 | `@路径/设计稿.html` 或 `@路径/wf-app.jsx` | `@docs/designs/kanban/Workflow.html` |
 | 需求描述 | 自然语言，说明要做什么 | `生成看板应用 PRD` |
 
@@ -35,13 +36,24 @@ allowed-tools: Read, Write, Bash
 - **较完整描述** (含字段、规则、流程) → 直接生成草稿, 仅对缺失部分追问
 - **附带设计稿/截图** → **必须先执行「第一步 A: 设计稿元素清单」**, 再生成草稿
 
+> **效果图入口**: `docs/designs/screenshots/reference/` 是约定的效果图存放目录。用户可以直接传 `@docs/designs/screenshots/reference/xxx.png` 作为需求来源，不需要再有文字描述。生成的 PRD 会自动记录该图路径，后续 `/visual-qa` 对比时也以同一张图为基准，形成「效果图 → PRD → 代码 → QA 对比」完整闭环。
+
 ### 第一步 A: 设计稿元素清单（有设计稿时必须执行，不可跳过）
 
 **目的**: 防止 PRD 生成时遗漏设计稿中的 UI 区域/组件，确保每个元素都有明确的 v1/v2/排除决策。
 
 **执行方法**:
 
-1. **读取设计文件** — HTML 文件扫描所有顶层结构 class（如 `.topbar` / `.activity-bar` / `.board` / `.shell-panel`）；JSX 文件扫描所有组件函数名；Figma 按 Frame 枚举。
+1. **读取设计文件** — 根据文件类型选择不同策略：
+
+   | 输入类型 | 扫描方法 |
+   |---------|---------|
+   | `.png` / `.jpg` 效果图 | 用 Read 工具加载图片（Claude 多模态视觉识别），逐区域描述可见的 UI 区块：顶栏、侧边栏、主内容区、浮层/抽屉等，记录每个区块的位置、尺寸感知、包含的控件 |
+   | `.html` 原型 | 扫描所有顶层结构 class（如 `.topbar` / `.activity-bar` / `.board`） |
+   | `.jsx` / `.tsx` 组件 | 扫描所有组件函数名（`function Xxx` / `const Xxx =`） |
+   | Figma 链接 | 按 Frame 名称枚举 |
+
+   > PNG/JPG 效果图的元素名从图中可见的文字标签或视觉区域命名（如「顶部导航栏」「左侧泳道」「底部终端面板」），没有 class 名时用位置+功能命名。
 
 2. **生成元素清单表格**，格式如下:
 
