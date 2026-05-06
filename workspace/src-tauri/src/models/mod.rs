@@ -5,7 +5,7 @@
 //! @task docs/tasks/tasks-claude-workflow-kanban-2026-04-28.json#T006
 //! @rules
 //!   - 遍历 .claude/commands/*.md, 每个文件对应一条 Command, 解析 YAML frontmatter
-//!   - Command 按 idx 升序排主 pipeline; idx 为 null 或 helper: true 的进入 helper 区
+//!   - Command 排序: workflow.json step 顺序 > frontmatter idx > 文件名字母序; helper: true 的进入 helper 区
 
 pub mod generic_board;
 pub use generic_board::{GenericBoard, GenericCard, GenericColumn};

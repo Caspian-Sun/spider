@@ -33,10 +33,10 @@ mkdir -p "$ACTUAL_DIR"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; NC='\033[0m'; BOLD='\033[1m'
 
-log()  { echo -e "${BLUE}[visual-qa]${NC} $*"; }
-ok()   { echo -e "${GREEN}✅${NC} $*"; }
-warn() { echo -e "${YELLOW}⚠️ ${NC} $*"; }
-fail() { echo -e "${RED}❌${NC} $*"; }
+log()  { echo -e "${BLUE}[visual-qa]${NC} $*" >&2; }
+ok()   { echo -e "${GREEN}✅${NC} $*" >&2; }
+warn() { echo -e "${YELLOW}⚠️ ${NC} $*" >&2; }
+fail() { echo -e "${RED}❌${NC} $*" >&2; }
 
 # ── 检查依赖 ──────────────────────────────────────────────────────────────────
 check_deps() {
@@ -53,33 +53,45 @@ check_deps() {
 
 # ── 截图：优先截 Tauri 窗口，否则用 web-only mock ────────────────────────────
 take_screenshot() {
+  # 清空整个 actual/ 目录，确保所有产出（截图/diff/JSON）都是本次新生成的
+  rm -f "$ACTUAL_DIR"/*
+
   if pgrep -x "$APP_NAME" &>/dev/null; then
     log "检测到 $APP_NAME 正在运行，截取真实窗口..."
     ACTUAL_IMG="$ACTUAL_DIR/actual-tauri.png"
-    bash "$SCRIPT_DIR/capture-window.sh" "$ACTUAL_IMG"
+    bash "$SCRIPT_DIR/capture-window.sh" "$ACTUAL_IMG" >&2
     SCREENSHOT_MODE="tauri"
   else
-    log "$APP_NAME 未运行，启动 web-only 服务截图..."
+    log "$APP_NAME 未运行，启动 web-only 服务截图（当前源码）..."
     ACTUAL_IMG="$ACTUAL_DIR/actual-spider.png"
     SCREENSHOT_MODE="web-only"
 
-    # 启动 vite dev server
+    # 杀掉可能残留的旧 vite 进程，确保拿到最新代码
+    lsof -ti tcp:$PORT | xargs kill -9 2>/dev/null || true
+
     cd "$WORKSPACE_DIR"
     npx vite --port $PORT &>/dev/null &
     VITE_PID=$!
     log "等待 dev server 就绪 (port $PORT)..."
-    for i in $(seq 1 15); do
+    for i in $(seq 1 20); do
       curl -s "http://localhost:$PORT" &>/dev/null && break
       sleep 1
     done
 
-    node "$WORKSPACE_DIR/screenshot-kanban.mjs" 2>/dev/null
+    node "$WORKSPACE_DIR/screenshot-kanban.mjs" >&2
 
     kill "$VITE_PID" 2>/dev/null || true
     cd "$SCRIPT_DIR"
   fi
 
-  echo "$ACTUAL_IMG"
+  # 验证截图确实产出，否则硬性失败
+  if [ ! -f "$ACTUAL_IMG" ]; then
+    fail "截图失败，文件不存在: $ACTUAL_IMG"
+    exit 1
+  fi
+  log "截图完成: $ACTUAL_IMG ($(date '+%H:%M:%S'))"
+
+  echo "$SCREENSHOT_MODE|$ACTUAL_IMG"
 }
 
 # ── 图像对比 ──────────────────────────────────────────────────────────────────
@@ -102,8 +114,11 @@ compare_images() {
   magick "$actual"    -resize "${TARGET_SIZE}!" /tmp/vqa-act.png 2>/dev/null
 
   # RMSE 差值（0=完全相同，1=完全不同）
+  # magick compare 输出格式: "7625.86 (0.116363)" — 括号内是归一化值 (0~1)
+  extract_norm_rmse() { grep -oE '\([0-9.]+\)' | tr -d '()' | tail -1; }
   RMSE_RAW=$(magick compare -metric RMSE /tmp/vqa-ref.png /tmp/vqa-act.png "$DIFF_IMG" 2>&1 || true)
-  RMSE=$(echo "$RMSE_RAW" | grep -oE '[0-9]+\.[0-9]+' | tail -1 || echo "1.0")
+  RMSE=$(echo "$RMSE_RAW" | extract_norm_rmse || echo "1.0")
+  [ -z "$RMSE" ] && RMSE="1.0"
   SIMILARITY=$(echo "scale=4; 1 - $RMSE" | bc 2>/dev/null || echo "0")
 
   # 分区域对比
@@ -111,8 +126,11 @@ compare_images() {
     local label="$1" crop="$2"
     magick /tmp/vqa-ref.png -crop "$crop" +repage /tmp/vqa-r-region.png 2>/dev/null
     magick /tmp/vqa-act.png -crop "$crop" +repage /tmp/vqa-a-region.png 2>/dev/null
-    magick compare -metric RMSE /tmp/vqa-r-region.png /tmp/vqa-a-region.png /tmp/vqa-diff-region.png 2>&1 \
-      | grep -oE '[0-9]+\.[0-9]+' | tail -1 || echo "1.0"
+    local raw
+    raw=$(magick compare -metric RMSE /tmp/vqa-r-region.png /tmp/vqa-a-region.png /tmp/vqa-diff-region.png 2>&1 || true)
+    local val
+    val=$(echo "$raw" | grep -oE '\([0-9.]+\)' | tr -d '()' | tail -1)
+    echo "${val:-1.0}"
   }
 
   # TopBar (顶部 48px)
@@ -217,7 +235,10 @@ main() {
   log "开始 Visual QA..."
   check_deps
 
-  ACTUAL_IMG=$(take_screenshot)
+  local take_result
+  take_result=$(take_screenshot)
+  SCREENSHOT_MODE=$(echo "$take_result" | cut -d'|' -f1)
+  ACTUAL_IMG=$(echo "$take_result" | cut -d'|' -f2-)
 
   METRICS=$(compare_images "$ACTUAL_IMG")
   RMSE_TOTAL=$(echo "$METRICS" | cut -d'|' -f1)

@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-05-06T08:34:47Z",
+  "mode": "web-only",
+  "reference": "/Users/sundaotao/Desktop/AI-Automation/spider/docs/designs/screenshots/reference/xiaoguotu.png",
+  "actual": "/Users/sundaotao/Desktop/AI-Automation/spider/docs/designs/screenshots/actual/actual-spider.png",
+  "diff": "/Users/sundaotao/Desktop/AI-Automation/spider/docs/designs/screenshots/actual/diff.png",
+  "sideBySide": "/Users/sundaotao/Desktop/AI-Automation/spider/docs/designs/screenshots/actual/side-by-side.png",
+  "metrics": {
+    "rmse": { "total": 0.116363, "topbar": 0.17902, "pipeline": 0.124011, "board": 0.117234 }
+  },
+  "grades": {
+    "P0_topbar":   { "pass": true,   "threshold": 0.35, "label": "TopBar 结构" },
+    "P0_pipeline": { "pass": true, "threshold": 0.35, "label": "Pipeline 结构" },
+    "P1":          { "pass": true,          "threshold": 0.25, "label": "视觉 Token 整体" },
+    "P2":          { "pass": true,          "threshold": 0.15, "label": "像素级精确度" }
+  }
+}

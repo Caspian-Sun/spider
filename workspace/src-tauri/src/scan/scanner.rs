@@ -1,6 +1,6 @@
 //! @description scan_workspace 主流程：遍历文件系统，解析 frontmatter，推 scan_progress 事件
 //! @module src-tauri/scan/scanner
-//! @dependencies gray_matter, serde_yaml, tokio
+//! @dependencies gray_matter, serde_yaml, tokio, serde_json
 //! @prd docs/prds/claude-workflow-kanban.md#文件扫描
 //! @task docs/tasks/tasks-claude-workflow-kanban-2026-04-28.json#T008
 //! @rules
@@ -9,7 +9,9 @@
 //!   - 解析失败的单个文件不阻断整个扫描, 错误记入 scan_errors 数组
 //!   - 扫描目录时必须排除 node_modules / .git / dist / target / .DS_Store
 //!   - 遍历 docs/prds/*.md, tbdCount = 正文中 [TBD] 字符串的出现次数
+//!   - 命令排序优先级: workflow.json step 顺序 > 命令文件 frontmatter idx > 文件名字母序
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Emitter};
@@ -72,11 +74,22 @@ pub async fn scan_workspace_dir(app: &AppHandle, root: PathBuf) -> Result<Worksp
         }
     }
 
-    workspace.commands.sort_by(|a, b| match (a.idx, b.idx) {
-        (Some(ai), Some(bi)) => ai.cmp(&bi),
-        (Some(_), None)      => std::cmp::Ordering::Less,
-        (None, Some(_))      => std::cmp::Ordering::Greater,
-        (None, None)         => a.id.cmp(&b.id),
+    // workflow.json step 顺序 → frontmatter idx → 字母序
+    let wf_order = read_workflow_order(&root).await;
+    workspace.commands.sort_by(|a, b| {
+        let a_pos = wf_order.get(&a.id);
+        let b_pos = wf_order.get(&b.id);
+        match (a_pos, b_pos) {
+            (Some(ap), Some(bp)) => ap.cmp(bp),
+            (Some(_), None)      => std::cmp::Ordering::Less,
+            (None, Some(_))      => std::cmp::Ordering::Greater,
+            (None, None)         => match (a.idx, b.idx) {
+                (Some(ai), Some(bi)) => ai.cmp(&bi),
+                (Some(_), None)      => std::cmp::Ordering::Less,
+                (None, Some(_))      => std::cmp::Ordering::Greater,
+                (None, None)         => a.id.cmp(&b.id),
+            },
+        }
     });
 
     emit_progress(app, "", 1.0);
@@ -279,5 +292,58 @@ fn parse_task_status(s: Option<&str>) -> TaskStatus {
         Some("done")        => TaskStatus::Done,
         Some("blocked")     => TaskStatus::Blocked,
         _                   => TaskStatus::Pending,
+    }
+}
+
+/// 读取 .claude/workflow.json，返回 command_id → 全局排序位置。
+/// 按固定顺序处理 workflow: main → bugfix → utility → 其余。
+/// workflow.json 不存在或解析失败时返回空 map（降级为 idx / 字母序）。
+async fn read_workflow_order(root: &Path) -> HashMap<String, u32> {
+    let path = root.join(".claude/workflow.json");
+    let Ok(content) = tokio::fs::read_to_string(&path).await else {
+        return HashMap::new();
+    };
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return HashMap::new();
+    };
+
+    let mut order: HashMap<String, u32> = HashMap::new();
+    let mut pos: u32 = 0;
+
+    let Some(wf_map) = json["workflows"].as_object() else {
+        return order;
+    };
+
+    // 固定优先顺序，保证 main 总在最前
+    let priority_keys = ["main", "bugfix", "utility"];
+    for key in &priority_keys {
+        if let Some(wf) = wf_map.get(*key) {
+            push_steps(wf, &mut order, &mut pos);
+        }
+    }
+    // 其余自定义 workflow（字典序，稳定）
+    let mut extra_keys: Vec<&str> = wf_map.keys()
+        .map(|k| k.as_str())
+        .filter(|k| !priority_keys.contains(k))
+        .collect();
+    extra_keys.sort();
+    for key in extra_keys {
+        push_steps(&wf_map[key], &mut order, &mut pos);
+    }
+
+    order
+}
+
+fn push_steps(wf: &serde_json::Value, order: &mut HashMap<String, u32>, pos: &mut u32) {
+    let Some(steps) = wf["steps"].as_array() else { return };
+    for step in steps {
+        if let Some(cmd) = step["command"].as_str() {
+            // 同一命令出现在多个 workflow 时，以第一次出现的位置为准
+            order.entry(cmd.to_string()).or_insert_with(|| {
+                let p = *pos;
+                *pos += 1;
+                p
+            });
+        }
     }
 }

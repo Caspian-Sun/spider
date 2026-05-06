@@ -7,7 +7,7 @@
  * @design docs/designs/claude-workflow-kanban/Workflow Kanban.html (.pipeline .pipe-step .pipe-gate .pipe-helpers)
  * @rules
  *   - Pipeline Strip 固定高度 38px，位于 TopBar 正下方，padding-left 64px 与 TopBar 对齐
- *   - 步骤顺序固定：1 /prd → 2 /plan → 3 /code → 4 /test → 5 /review → 6 /build → 7 /deploy → 8 /release
+ *   - 步骤顺序由后端扫描时读取 .claude/workflow.json 决定，前端不二次排序，直接用 workspace.commands 过滤后的顺序
  *   - 每个步骤显示：数字编号方块（16×16px，border-radius 3px）+ 命令名，整体 border-radius 4px 的圆角按钮
  *   - 激活步骤：绿色边框（rgba(110,231,127,0.4)）+ 绿色背景（rgba(110,231,127,0.06)）+ 数字方块绿底黑字
  *   - 已完成步骤：数字方块青色底（var(--teal)）黑字加粗
@@ -38,15 +38,8 @@ export function PipelineStrip() {
 
   if (!workspace || layout === 'generic') return null;
 
-  const steps = workspace.commands
-    .filter((c) => !c.helper)
-    .sort((a, b) => {
-      // idx-less commands keep their original workspace order (stable sort)
-      if (a.idx != null && b.idx != null) return a.idx - b.idx;
-      if (a.idx != null) return -1;
-      if (b.idx != null) return 1;
-      return 0;
-    });
+  // 后端已按 workflow.json 排序，前端直接过滤，不再二次排序
+  const steps = workspace.commands.filter((c) => !c.helper);
 
   const helpers = workspace.commands.filter((c) => c.helper);
 
@@ -85,7 +78,7 @@ export function PipelineStrip() {
             ].filter(Boolean).join(' ')}
             onClick={() => handleStepClick(cmd)}
           >
-            <span className={styles.idxBox}>{cmd.idx}</span>
+            <span className={styles.idxBox}>{i + 1}</span>
             <span className={styles.name}>/{cmd.cmd}</span>
           </button>
         </div>
