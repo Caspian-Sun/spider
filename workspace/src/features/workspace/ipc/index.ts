@@ -31,3 +31,7 @@ export async function getRecentWorkspaces(): Promise<string[]> {
 export async function addRecentWorkspace(path: string): Promise<void> {
   return invoke<void>(IPC.Cmd.ADD_RECENT_WORKSPACE, { path });
 }
+
+export async function startWatcher(path: string): Promise<void> {
+  return invoke<void>(IPC.Cmd.START_WATCHER, { path });
+}

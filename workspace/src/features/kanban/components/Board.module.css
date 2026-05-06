@@ -41,6 +41,12 @@
 .laneGroup {
   display: flex;
   flex-direction: row;
-  align-items: flex-start;
+  align-items: stretch;
   flex-shrink: 0;
+}
+
+/* Connector 不随 Lane 拉伸，固定在顶部 */
+.connectorSlot {
+  align-self: flex-start;
+  display: flex;
 }

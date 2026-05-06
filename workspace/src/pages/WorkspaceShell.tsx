@@ -22,6 +22,7 @@ import {
   scanWorkspace,
   getRecentWorkspaces,
   addRecentWorkspace,
+  startWatcher,
 } from '@/features/workspace/ipc';
 import type { ScanProgressPayload, ValidateResult } from '@/types/ipc';
 import { KanbanShell } from './KanbanShell';
@@ -157,6 +158,7 @@ export function WorkspaceShell() {
       setWorkspace(ws);
       addRecent(path);
       await addRecentWorkspace(path);
+      startWatcher(path).catch(() => { /* watcher best-effort */ });
     } catch (e) {
       setScanError(e instanceof Error ? e.message : String(e));
       setPhase('error');

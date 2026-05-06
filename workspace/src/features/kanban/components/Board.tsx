@@ -34,7 +34,7 @@ export function Board({ showPipeline = true, cwd = '.' }: BoardProps) {
 
   if (!workspace) return null;
 
-  const commands = workspace.commands;
+  const commands = workspace.commands.filter((c) => !c.helper);
   const top    = TOPBAR_HEIGHT + (showPipeline ? PIPELINE_HEIGHT : 0);
   const bottom = RETRO_HEIGHT + (shellOpen ? SHELL_HEIGHT : 0);
 
@@ -51,11 +51,13 @@ export function Board({ showPipeline = true, cwd = '.' }: BoardProps) {
         {commands.map((cmd, i) => (
           <div key={cmd.id} className={styles.laneGroup}>
             {i > 0 && (
-              <Connector
-                gate={cmd.gate}
-                label={cmd.inputs[0]}
-                height={200}
-              />
+              <div className={styles.connectorSlot}>
+                <Connector
+                  gate={cmd.gate}
+                  label={cmd.inputs[0]}
+                  height={200}
+                />
+              </div>
             )}
             <Lane command={cmd} cwd={cwd} />
           </div>

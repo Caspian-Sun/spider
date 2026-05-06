@@ -34,6 +34,7 @@ import { useActivityBarStore } from '@/features/activity-bar/stores/useActivityB
 import { useShellStore } from '@/features/shell/stores/useShellStore';
 import { useWorkspaceStore } from '@/stores/useWorkspaceStore';
 import { useNotificationStore } from '@/features/notifications/stores/useNotificationStore';
+import { useWorkspaceWatcher } from '@/hooks/useWorkspaceWatcher';
 
 export function KanbanShell() {
   const { layout } = useLayoutStore();
@@ -41,6 +42,7 @@ export function KanbanShell() {
   const { toggle: toggleShell } = useShellStore();
   const { workspace } = useWorkspaceStore();
   const { isDrawerOpen } = useNotificationStore();
+  useWorkspaceWatcher();
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
 
   const isWorkflow = layout === 'workflow';

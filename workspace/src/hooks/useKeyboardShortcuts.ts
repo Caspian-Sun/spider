@@ -12,7 +12,7 @@
 
 import { useEffect } from 'react';
 import { useWorkspaceStore } from '@/stores/useWorkspaceStore';
-import { pickWorkspaceFolder, validateWorkspace, scanWorkspace, addRecentWorkspace } from '@/features/workspace/ipc';
+import { pickWorkspaceFolder, validateWorkspace, scanWorkspace, addRecentWorkspace, startWatcher } from '@/features/workspace/ipc';
 
 const SHORTCUTS = {
   OPEN_WORKSPACE:  'o',   // ⌘O / Ctrl+O
@@ -40,6 +40,7 @@ export function useKeyboardShortcuts() {
             setWorkspace(ws);
             addRecent(path);
             await addRecentWorkspace(path);
+            startWatcher(path).catch(() => { /* watcher best-effort */ });
           } catch { /* user cancelled or error */ }
           break;
         }

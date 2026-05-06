@@ -28,6 +28,7 @@
 | 让某些事件自动触发检查 | [hooks/README.md](hooks/README.md) 看怎么加 |
 | 让 AI 遵守某条规范 | [rules/](rules/) 加 md 文件, 在 CLAUDE.md 里引 |
 | 让大任务并行跑 | [agents/README.md](agents/README.md) 看 sub-agent 怎么用 |
+| 对比实际效果和设计稿 | `/visual-qa` — 自动截图 + 像素对比 + P0/P1/P2 报告 |
 | 配置权限减少确认弹窗 | 改 `settings.local.json` (不入 git) |
 | 配置全团队共享的 hook | 改 `settings.json` (入 git) |
 
@@ -50,7 +51,7 @@
 
 ## 当前项目状态
 
-**命令** (14): `/prd` `/prd-check` `/plan` `/plan-check` `/code` `/test` `/review` `/bug-check` `/fix` `/build` `/deploy` `/release` `/start` `/meta-audit`
+**命令** (15): `/prd` `/prd-check` `/plan` `/plan-check` `/code` `/test` `/review` `/bug-check` `/fix` `/build` `/deploy` `/release` `/start` `/meta-audit` `/visual-qa`
 
 **技能包** (4): `ext-dep-audit` `ext-perf-audit` `ext-a11y-check` `ext-changelog`
 
