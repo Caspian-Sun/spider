@@ -1,4 +1,4 @@
-# Spider (代号: spider)
+# Spider
 
 Tauri 2 桌面端工具，把 [`claude-code-workflow`](../claude-code-workflow) 仓库的 `.claude/` + `docs/` 可视化成可操作的看板。每条泳道 = 一个工作流命令，每张卡片 = 一个真实 PTY 终端会话。
 
