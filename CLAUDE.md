@@ -3,6 +3,9 @@
 > Claude Code 入职培训。详细规则拆分在 `.claude/rules/` 下，按需读取。
 > 遇到具体场景时，先读对应规则文件再执行。
 
+> **如果你是通过 GitHub Action 被 `@claude` 触发的**: 必须先读 `.github/AGENT.md` 里的默认守则
+> (开 PR 而非直推、PR 描述模板、禁止自动 merge / 修改 workflows / 删文件等), 优先级高于本文件。
+
 ---
 
 ## 项目结构
