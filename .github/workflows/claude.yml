@@ -36,6 +36,8 @@ jobs:
           # 优先用 Pro/Max 订阅的 OAuth token, 没有再回退到 API key 按量计费
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # 使用 Claude 系列最强模型 Opus 4.7 (通过 claude_args 透传到 CLI)
+          claude_args: "--model claude-opus-4-7"
           # 只有 OWNER / MEMBER / COLLABORATOR 才能让 Claude 干活
           allowed_non_write_users: ""
           trigger_phrase: "@claude"
