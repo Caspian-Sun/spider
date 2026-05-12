@@ -36,8 +36,11 @@ jobs:
           # 优先用 Pro/Max 订阅的 OAuth token, 没有再回退到 API key 按量计费
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # 使用 Claude 系列最强模型 Opus 4.7 (通过 claude_args 透传到 CLI)
-          claude_args: "--model claude-opus-4-7"
+          # 使用 Claude 系列最强模型 Opus 4.7, 并放行开 PR 所需的 gh/git 命令
+          # 注: 故意不放 gh pr merge — 由 owner 人工合并 (见 .github/AGENT.md)
+          claude_args: >-
+            --model claude-opus-4-7
+            --allowedTools "Bash(git:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh issue comment:*),Bash(gh issue view:*),Bash(gh issue list:*)"
           # 只有 OWNER / MEMBER / COLLABORATOR 才能让 Claude 干活
           allowed_non_write_users: ""
           trigger_phrase: "@claude"
